@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.sqlite3
+
+# Entorno virtual
+backend/.venv/
+
+# Variables de entorno
+backend/.env
+
+# Django
+backend/staticfiles/
+backend/media/
+
+# Logs
+*.log
+
+# Node / Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# VS Code
+.vscode/
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
