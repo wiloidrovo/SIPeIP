@@ -34,16 +34,52 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
     ...options,
   });
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(errorText || "Error en la solicitud");
-  }
-
   if (response.status === 204) {
     return null as T;
   }
 
-  return response.json();
+  const contentType = response.headers.get("content-type") || "";
+  const data = contentType.includes("application/json")
+    ? await response.json()
+    : await response.text();
+
+  if (!response.ok) {
+    throw new Error(formatApiError(data));
+  }
+
+  return data;
+}
+
+function formatApiError(error: unknown): string {
+  if (typeof error === "string") {
+    return error || "Error en la solicitud.";
+  }
+
+  if (Array.isArray(error)) {
+    return error.map(String).join(" ");
+  }
+
+  if (error && typeof error === "object") {
+    const messages = Object.entries(error).flatMap(([field, value]) => {
+      if (Array.isArray(value)) {
+        return value.map((item) => `${field}: ${item}`);
+      }
+
+      if (typeof value === "string") {
+        return `${field}: ${value}`;
+      }
+
+      if (value && typeof value === "object") {
+        return `${field}: ${formatApiError(value)}`;
+      }
+
+      return `${field}: ${String(value)}`;
+    });
+
+    return messages.join(" | ") || "Error en la solicitud.";
+  }
+
+  return "Error en la solicitud.";
 }
 
 export const rolesApi = {

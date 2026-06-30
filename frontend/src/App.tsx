@@ -3,6 +3,7 @@ import type { FormEvent } from "react";
 import "./App.css";
 import type { Rol, Usuario } from "./services/api";
 import { rolesApi, usuariosApi } from "./services/api";
+import { validateRolForm, validateUsuarioForm } from "./utils/validation";
 
 const permisosBase = [
   "usuarios.ver",
@@ -67,32 +68,50 @@ function App() {
   async function crearRol(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (!rolForm.nombre.trim()) {
-      setMensaje("El nombre del rol es obligatorio.");
+    const validation = validateRolForm(rolForm);
+
+    if (!validation.valid) {
+      setMensaje(validation.message);
       return;
     }
 
     try {
-      await rolesApi.crear(rolForm);
+      await rolesApi.crear({
+        nombre: rolForm.nombre.trim(),
+        descripcion: rolForm.descripcion.trim(),
+        activo: rolForm.activo,
+      });
+
       setRolForm({
         nombre: "",
         descripcion: "",
         activo: true,
       });
+
       setMensaje("Rol creado correctamente.");
       await cargarDatos();
-    } catch {
-      setMensaje("No se pudo crear el rol.");
+    } catch (error) {
+      setMensaje(
+        error instanceof Error ? error.message : "No se pudo crear el rol.",
+      );
     }
   }
 
   async function asignarPermisos(id: number) {
     try {
-      await rolesApi.asignarPermisos(id, permisosBase);
-      setMensaje("Permisos asignados correctamente.");
+      const rolActualizado = await rolesApi.asignarPermisos(id, permisosBase);
+
+      setMensaje(
+        `Permisos asignados correctamente al rol ${rolActualizado.nombre}. Total: ${rolActualizado.permisos.length}.`,
+      );
+
       await cargarDatos();
-    } catch {
-      setMensaje("No se pudieron asignar los permisos.");
+    } catch (error) {
+      setMensaje(
+        error instanceof Error
+          ? error.message
+          : "No se pudieron asignar los permisos.",
+      );
     }
   }
 
@@ -107,25 +126,30 @@ function App() {
       await rolesApi.eliminar(id);
       setMensaje("Rol eliminado correctamente.");
       await cargarDatos();
-    } catch {
-      setMensaje(
-        "No se pudo eliminar el rol. Puede estar asociado a usuarios.",
-      );
+    } catch (error) {
+      setMensaje(error instanceof Error ? error.message : "Ocurrió un error.");
     }
   }
 
   async function crearUsuario(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (!usuarioForm.username.trim()) {
-      setMensaje("El nombre de usuario es obligatorio.");
+    const validation = validateUsuarioForm(usuarioForm);
+
+    if (!validation.valid) {
+      setMensaje(validation.message);
       return;
     }
 
     try {
       await usuariosApi.crear({
         ...usuarioForm,
-        rol: usuarioForm.rol ? Number(usuarioForm.rol) : null,
+        username: usuarioForm.username.trim(),
+        email: usuarioForm.email.trim(),
+        first_name: usuarioForm.first_name.trim(),
+        last_name: usuarioForm.last_name.trim(),
+        telefono: usuarioForm.telefono.trim(),
+        rol: Number(usuarioForm.rol),
       });
 
       setUsuarioForm({
@@ -143,8 +167,10 @@ function App() {
 
       setMensaje("Usuario creado correctamente.");
       await cargarDatos();
-    } catch {
-      setMensaje("No se pudo crear el usuario.");
+    } catch (error) {
+      setMensaje(
+        error instanceof Error ? error.message : "No se pudo crear el usuario.",
+      );
     }
   }
 
@@ -153,8 +179,8 @@ function App() {
       await usuariosApi.activar(id);
       setMensaje("Usuario activado correctamente.");
       await cargarDatos();
-    } catch {
-      setMensaje("No se pudo activar el usuario.");
+    } catch (error) {
+      setMensaje(error instanceof Error ? error.message : "Ocurrió un error.");
     }
   }
 
@@ -163,8 +189,8 @@ function App() {
       await usuariosApi.bloquear(id);
       setMensaje("Usuario bloqueado correctamente.");
       await cargarDatos();
-    } catch {
-      setMensaje("No se pudo bloquear el usuario.");
+    } catch (error) {
+      setMensaje(error instanceof Error ? error.message : "Ocurrió un error.");
     }
   }
 
@@ -179,8 +205,8 @@ function App() {
       await usuariosApi.eliminar(id);
       setMensaje("Usuario eliminado correctamente.");
       await cargarDatos();
-    } catch {
-      setMensaje("No se pudo eliminar el usuario.");
+    } catch (error) {
+      setMensaje(error instanceof Error ? error.message : "Ocurrió un error.");
     }
   }
 
