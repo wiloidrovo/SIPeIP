@@ -1,4 +1,6 @@
-from rest_framework import filters, viewsets
+from rest_framework import filters, status, viewsets
+from rest_framework.decorators import action
+from rest_framework.response import Response
 
 from .models import Usuario
 from .serializers import UsuarioSerializer
@@ -28,3 +30,23 @@ class UsuarioViewSet(viewsets.ModelViewSet):
     ordering = [
         "username",
     ]
+
+    @action(detail=True, methods=["post"])
+    def activar(self, request, pk=None):
+        usuario = self.get_object()
+        usuario.estado = Usuario.EstadoUsuario.ACTIVO
+        usuario.is_active = True
+        usuario.save(update_fields=["estado", "is_active"])
+
+        serializer = self.get_serializer(usuario)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=["post"])
+    def bloquear(self, request, pk=None):
+        usuario = self.get_object()
+        usuario.estado = Usuario.EstadoUsuario.BLOQUEADO
+        usuario.is_active = False
+        usuario.save(update_fields=["estado", "is_active"])
+
+        serializer = self.get_serializer(usuario)
+        return Response(serializer.data, status=status.HTTP_200_OK)

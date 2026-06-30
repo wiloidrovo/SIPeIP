@@ -11,6 +11,7 @@ class RolSerializer(serializers.ModelSerializer):
             "nombre",
             "descripcion",
             "activo",
+            "permisos",
             "fecha_creacion",
             "fecha_actualizacion",
         ]
