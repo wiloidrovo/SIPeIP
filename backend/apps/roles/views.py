@@ -32,14 +32,12 @@ class RolViewSet(viewsets.ModelViewSet):
         rol = self.get_object()
         permisos = request.data.get("permisos", [])
 
-        if not isinstance(permisos, list):
-            return Response(
-                {"detail": "El campo permisos debe ser una lista."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        serializer = self.get_serializer(
+            rol,
+            data={"permisos": permisos},
+            partial=True,
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
 
-        rol.permisos = permisos
-        rol.save(update_fields=["permisos", "fecha_actualizacion"])
-
-        serializer = self.get_serializer(rol)
         return Response(serializer.data, status=status.HTTP_200_OK)
