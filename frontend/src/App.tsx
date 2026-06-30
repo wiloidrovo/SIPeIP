@@ -1,122 +1,472 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
-import './App.css'
+import { useEffect, useState } from "react";
+import type { FormEvent } from "react";
+import "./App.css";
+import type { Rol, Usuario } from "./services/api";
+import { rolesApi, usuariosApi } from "./services/api";
+
+const permisosBase = [
+  "usuarios.ver",
+  "usuarios.crear",
+  "usuarios.editar",
+  "usuarios.eliminar",
+  "roles.ver",
+  "roles.crear",
+  "roles.editar",
+  "roles.eliminar",
+  "roles.asignar_permisos",
+];
 
 function App() {
-  const [count, setCount] = useState(0)
+  const [roles, setRoles] = useState<Rol[]>([]);
+  const [usuarios, setUsuarios] = useState<Usuario[]>([]);
+  const [mensaje, setMensaje] = useState("");
+  const [cargando, setCargando] = useState(false);
+
+  const [rolForm, setRolForm] = useState({
+    nombre: "",
+    descripcion: "",
+    activo: true,
+  });
+
+  const [usuarioForm, setUsuarioForm] = useState({
+    username: "",
+    email: "",
+    first_name: "",
+    last_name: "",
+    password: "",
+    rol: "",
+    estado: "ACTIVO" as Usuario["estado"],
+    telefono: "",
+    is_active: true,
+    is_staff: false,
+  });
+
+  async function cargarDatos() {
+    setCargando(true);
+    setMensaje("");
+
+    try {
+      const [rolesData, usuariosData] = await Promise.all([
+        rolesApi.listar(),
+        usuariosApi.listar(),
+      ]);
+
+      setRoles(rolesData);
+      setUsuarios(usuariosData);
+    } catch (error) {
+      setMensaje("No se pudieron cargar los datos desde el backend.");
+    } finally {
+      setCargando(false);
+    }
+  }
+
+  useEffect(() => {
+    cargarDatos();
+  }, []);
+
+  async function crearRol(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!rolForm.nombre.trim()) {
+      setMensaje("El nombre del rol es obligatorio.");
+      return;
+    }
+
+    try {
+      await rolesApi.crear(rolForm);
+      setRolForm({
+        nombre: "",
+        descripcion: "",
+        activo: true,
+      });
+      setMensaje("Rol creado correctamente.");
+      await cargarDatos();
+    } catch {
+      setMensaje("No se pudo crear el rol.");
+    }
+  }
+
+  async function asignarPermisos(id: number) {
+    try {
+      await rolesApi.asignarPermisos(id, permisosBase);
+      setMensaje("Permisos asignados correctamente.");
+      await cargarDatos();
+    } catch {
+      setMensaje("No se pudieron asignar los permisos.");
+    }
+  }
+
+  async function eliminarRol(id: number) {
+    const confirmar = window.confirm("¿Desea eliminar este rol?");
+
+    if (!confirmar) {
+      return;
+    }
+
+    try {
+      await rolesApi.eliminar(id);
+      setMensaje("Rol eliminado correctamente.");
+      await cargarDatos();
+    } catch {
+      setMensaje(
+        "No se pudo eliminar el rol. Puede estar asociado a usuarios.",
+      );
+    }
+  }
+
+  async function crearUsuario(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!usuarioForm.username.trim()) {
+      setMensaje("El nombre de usuario es obligatorio.");
+      return;
+    }
+
+    try {
+      await usuariosApi.crear({
+        ...usuarioForm,
+        rol: usuarioForm.rol ? Number(usuarioForm.rol) : null,
+      });
+
+      setUsuarioForm({
+        username: "",
+        email: "",
+        first_name: "",
+        last_name: "",
+        password: "",
+        rol: "",
+        estado: "ACTIVO",
+        telefono: "",
+        is_active: true,
+        is_staff: false,
+      });
+
+      setMensaje("Usuario creado correctamente.");
+      await cargarDatos();
+    } catch {
+      setMensaje("No se pudo crear el usuario.");
+    }
+  }
+
+  async function activarUsuario(id: number) {
+    try {
+      await usuariosApi.activar(id);
+      setMensaje("Usuario activado correctamente.");
+      await cargarDatos();
+    } catch {
+      setMensaje("No se pudo activar el usuario.");
+    }
+  }
+
+  async function bloquearUsuario(id: number) {
+    try {
+      await usuariosApi.bloquear(id);
+      setMensaje("Usuario bloqueado correctamente.");
+      await cargarDatos();
+    } catch {
+      setMensaje("No se pudo bloquear el usuario.");
+    }
+  }
+
+  async function eliminarUsuario(id: number) {
+    const confirmar = window.confirm("¿Desea eliminar este usuario?");
+
+    if (!confirmar) {
+      return;
+    }
+
+    try {
+      await usuariosApi.eliminar(id);
+      setMensaje("Usuario eliminado correctamente.");
+      await cargarDatos();
+    } catch {
+      setMensaje("No se pudo eliminar el usuario.");
+    }
+  }
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
+    <main className="app">
+      <section className="hero">
         <div>
-          <h1>Get started</h1>
+          <p className="eyebrow">Sprint 1</p>
+          <h1>SIPeIP - Gestión de usuarios y roles</h1>
           <p>
-            Edit <code>src/App.tsx</code> and save to test <code>HMR</code>
+            Interfaz inicial conectada al backend Django REST Framework para
+            administrar usuarios, roles, permisos y estados de acceso.
           </p>
         </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
+
+        <button type="button" onClick={cargarDatos}>
+          {cargando ? "Cargando..." : "Actualizar datos"}
         </button>
       </section>
 
-      <div className="ticks"></div>
+      {mensaje && <div className="message">{mensaje}</div>}
 
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
+      <section className="grid">
+        <div className="card">
+          <h2>Registrar rol</h2>
+
+          <form onSubmit={crearRol}>
+            <label>
+              Nombre
+              <input
+                value={rolForm.nombre}
+                onChange={(event) =>
+                  setRolForm({ ...rolForm, nombre: event.target.value })
+                }
+                placeholder="Ej. Administrador"
+              />
+            </label>
+
+            <label>
+              Descripción
+              <textarea
+                value={rolForm.descripcion}
+                onChange={(event) =>
+                  setRolForm({ ...rolForm, descripcion: event.target.value })
+                }
+                placeholder="Descripción del rol"
+              />
+            </label>
+
+            <label className="checkbox">
+              <input
+                type="checkbox"
+                checked={rolForm.activo}
+                onChange={(event) =>
+                  setRolForm({ ...rolForm, activo: event.target.checked })
+                }
+              />
+              Rol activo
+            </label>
+
+            <button type="submit">Guardar rol</button>
+          </form>
         </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
+
+        <div className="card">
+          <h2>Registrar usuario</h2>
+
+          <form onSubmit={crearUsuario}>
+            <label>
+              Usuario
+              <input
+                value={usuarioForm.username}
+                onChange={(event) =>
+                  setUsuarioForm({
+                    ...usuarioForm,
+                    username: event.target.value,
+                  })
+                }
+                placeholder="usuario.prueba"
+              />
+            </label>
+
+            <label>
+              Correo
+              <input
+                type="email"
+                value={usuarioForm.email}
+                onChange={(event) =>
+                  setUsuarioForm({ ...usuarioForm, email: event.target.value })
+                }
+                placeholder="usuario@sipeip.local"
+              />
+            </label>
+
+            <label>
+              Nombres
+              <input
+                value={usuarioForm.first_name}
+                onChange={(event) =>
+                  setUsuarioForm({
+                    ...usuarioForm,
+                    first_name: event.target.value,
+                  })
+                }
+              />
+            </label>
+
+            <label>
+              Apellidos
+              <input
+                value={usuarioForm.last_name}
+                onChange={(event) =>
+                  setUsuarioForm({
+                    ...usuarioForm,
+                    last_name: event.target.value,
+                  })
+                }
+              />
+            </label>
+
+            <label>
+              Contraseña
+              <input
+                type="password"
+                value={usuarioForm.password}
+                onChange={(event) =>
+                  setUsuarioForm({
+                    ...usuarioForm,
+                    password: event.target.value,
+                  })
+                }
+              />
+            </label>
+
+            <label>
+              Rol
+              <select
+                value={usuarioForm.rol}
+                onChange={(event) =>
+                  setUsuarioForm({ ...usuarioForm, rol: event.target.value })
+                }
+              >
+                <option value="">Sin rol</option>
+                {roles.map((rol) => (
+                  <option key={rol.id} value={rol.id}>
+                    {rol.nombre}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label>
+              Teléfono
+              <input
+                value={usuarioForm.telefono}
+                onChange={(event) =>
+                  setUsuarioForm({
+                    ...usuarioForm,
+                    telefono: event.target.value,
+                  })
+                }
+              />
+            </label>
+
+            <button type="submit">Guardar usuario</button>
+          </form>
         </div>
       </section>
 
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
+      <section className="card">
+        <h2>Roles registrados</h2>
+
+        <div className="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Nombre</th>
+                <th>Descripción</th>
+                <th>Activo</th>
+                <th>Permisos</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {roles.map((rol) => (
+                <tr key={rol.id}>
+                  <td>{rol.id}</td>
+                  <td>{rol.nombre}</td>
+                  <td>{rol.descripcion || "Sin descripción"}</td>
+                  <td>{rol.activo ? "Sí" : "No"}</td>
+                  <td>{rol.permisos?.length || 0}</td>
+                  <td className="actions">
+                    <button
+                      type="button"
+                      onClick={() => asignarPermisos(rol.id)}
+                    >
+                      Asignar permisos
+                    </button>
+                    <button
+                      type="button"
+                      className="danger"
+                      onClick={() => eliminarRol(rol.id)}
+                    >
+                      Eliminar
+                    </button>
+                  </td>
+                </tr>
+              ))}
+
+              {roles.length === 0 && (
+                <tr>
+                  <td colSpan={6}>No existen roles registrados.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="card">
+        <h2>Usuarios registrados</h2>
+
+        <div className="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Usuario</th>
+                <th>Nombre</th>
+                <th>Correo</th>
+                <th>Rol</th>
+                <th>Estado</th>
+                <th>Activo</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {usuarios.map((usuario) => (
+                <tr key={usuario.id}>
+                  <td>{usuario.id}</td>
+                  <td>{usuario.username}</td>
+                  <td>
+                    {usuario.first_name} {usuario.last_name}
+                  </td>
+                  <td>{usuario.email || "Sin correo"}</td>
+                  <td>{usuario.rol_detalle?.nombre || "Sin rol"}</td>
+                  <td>{usuario.estado}</td>
+                  <td>{usuario.is_active ? "Sí" : "No"}</td>
+                  <td className="actions">
+                    <button
+                      type="button"
+                      onClick={() => activarUsuario(usuario.id)}
+                    >
+                      Activar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => bloquearUsuario(usuario.id)}
+                    >
+                      Bloquear
+                    </button>
+                    <button
+                      type="button"
+                      className="danger"
+                      onClick={() => eliminarUsuario(usuario.id)}
+                    >
+                      Eliminar
+                    </button>
+                  </td>
+                </tr>
+              ))}
+
+              {usuarios.length === 0 && (
+                <tr>
+                  <td colSpan={8}>No existen usuarios registrados.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  );
 }
 
-export default App
+export default App;
