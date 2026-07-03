@@ -5,6 +5,10 @@ from .permissions import ALLOWED_ROLE_PERMISSIONS
 
 
 class RolSerializer(serializers.ModelSerializer):
+    """
+    Serializador para el modelo Rol.
+    Incluye el conteo de usuarios asignados a este rol de forma virtual.
+    """
     usuarios_count = serializers.SerializerMethodField()
 
     class Meta:
@@ -19,6 +23,7 @@ class RolSerializer(serializers.ModelSerializer):
             "fecha_creacion",
             "fecha_actualizacion",
         ]
+        # Estado y permisos se gestionan mediante endpoints dedicados, no directamente.
         read_only_fields = [
             "id",
             "usuarios_count",
@@ -30,6 +35,7 @@ class RolSerializer(serializers.ModelSerializer):
         return obj.usuarios.count()
 
     def validate_nombre(self, value):
+        """Valida que el nombre no esté vacío."""
         nombre = value.strip()
 
         if not nombre:
@@ -41,6 +47,7 @@ class RolSerializer(serializers.ModelSerializer):
         return value.strip() if value else ""
 
     def validate_permisos(self, value):
+        """Valida que los permisos proporcionados pertenezcan al catálogo del sistema."""
         if value in (None, ""):
             return []
 

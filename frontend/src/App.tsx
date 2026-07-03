@@ -17,6 +17,11 @@ const permisosBase = [
   "roles.asignar_permisos",
 ];
 
+/**
+ * Componente principal de la aplicación.
+ * Administra el estado global de la vista, incluyendo el listado de usuarios,
+ * roles, permisos y formularios de edición/creación.
+ */
 function App() {
   const [roles, setRoles] = useState<Rol[]>([]);
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
@@ -53,17 +58,23 @@ function App() {
     is_staff: false,
   });
 
+  // Filtra en memoria los roles según el texto de búsqueda ingresado
   const rolesFiltrados = roles.filter((rol) => {
     const texto = `${rol.nombre} ${rol.descripcion}`.toLowerCase();
     return texto.includes(busquedaRoles.toLowerCase().trim());
   });
 
+  // Filtra en memoria los usuarios considerando múltiples campos (nombre, correo, rol, etc.)
   const usuariosFiltrados = usuarios.filter((usuario) => {
     const texto =
       `${usuario.username} ${usuario.email} ${usuario.first_name} ${usuario.last_name} ${usuario.estado} ${usuario.rol_detalle?.nombre || ""}`.toLowerCase();
     return texto.includes(busquedaUsuarios.toLowerCase().trim());
   });
 
+  /**
+   * Obtiene la lista actualizada de roles y usuarios desde la API.
+   * Inicializa el estado local de permisos por rol para la vista de checkboxes.
+   */
   async function cargarDatos(limpiarMensaje = true) {
     setCargando(true);
 
@@ -100,6 +111,10 @@ function App() {
     cargarDatos();
   }, []);
 
+  /**
+   * Procesa el formulario de roles. Si hay un ID en edición, actualiza el rol;
+   * de lo contrario, crea uno nuevo. Muestra los errores de validación si existen.
+   */
   async function crearRol(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -179,6 +194,10 @@ function App() {
     });
   }
 
+  /**
+   * Envía los permisos seleccionados actualmente en el UI hacia el backend
+   * para actualizar los accesos del rol especificado.
+   */
   async function asignarPermisos(id: number) {
     const permisosSeleccionados = permisosPorRol[id] || [];
 
@@ -202,6 +221,7 @@ function App() {
     }
   }
 
+  /** Activa un rol, permitiendo que sus usuarios hereden sus permisos. */
   async function activarRol(id: number) {
     try {
       await rolesApi.activar(id);
@@ -214,6 +234,7 @@ function App() {
     }
   }
 
+  /** Desactiva un rol, impidiendo su uso. Fallará si tiene usuarios asignados. */
   async function desactivarRol(id: number) {
     try {
       await rolesApi.desactivar(id);
@@ -255,6 +276,10 @@ function App() {
     }
   }
 
+  /**
+   * Procesa el formulario de usuarios (creación o edición).
+   * En edición, la contraseña es opcional. Sincroniza la lista completa al finalizar.
+   */
   async function crearUsuario(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -354,6 +379,7 @@ function App() {
     setMensaje("");
   }
 
+  /** Restaura el acceso de un usuario al sistema. */
   async function activarUsuario(id: number) {
     try {
       await usuariosApi.activar(id);
@@ -364,6 +390,7 @@ function App() {
     }
   }
 
+  /** Suspende el acceso de un usuario indefinidamente. */
   async function bloquearUsuario(id: number) {
     try {
       await usuariosApi.bloquear(id);

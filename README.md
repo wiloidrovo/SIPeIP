@@ -4,18 +4,28 @@ Sistema web para la gestión de usuarios, roles, planes, proyectos, objetivos, r
 
 ## Stack tecnológico
 
-- Frontend: React + Vite + TypeScript
-- Backend: Django + Django REST Framework
-- Base de datos: PostgreSQL
-- Control de versiones: Git + GitHub
-- Pipeline: GitHub Actions
+- **Frontend**: React 18+ con Vite, TypeScript y Vanilla CSS.
+- **Backend**: Django 5.2+ con Django REST Framework.
+- **Base de datos**: PostgreSQL.
+- **Control de versiones**: Git + GitHub.
+- **Pipeline**: GitHub Actions.
 
-## Estado actual
+## Arquitectura
 
-El proyecto se encuentra en fase inicial de implementación. Actualmente se ha configurado el backend con Django, conexión a PostgreSQL y los módulos base del Sprint 1:
+El sistema se organiza bajo una arquitectura web cliente-servidor con separación clara entre responsabilidades:
 
-- Gestión de usuarios
-- Gestión de roles
+```text
+Navegador Cliente → React (Frontend SPA) → Django REST API (Backend) → PostgreSQL (Base de datos)
+```
+
+A nivel de código, el backend mantiene separación entre modelo, controlador y persistencia mediante el patrón de diseño implementado por Django. El frontend interactúa exclusivamente mediante peticiones HTTP asíncronas a la API REST.
+
+## Estado actual: Sprint 1
+
+El proyecto ha completado los componentes base del Sprint 1, correspondientes al acceso y seguridad del sistema:
+
+- **Gestión de usuarios**: Registro, edición, activación, desactivación y bloqueo de usuarios.
+- **Gestión de roles**: Creación, actualización, control de estados y asignación granular de permisos del sistema.
 
 ## Estructura del proyecto
 
@@ -23,135 +33,121 @@ El proyecto se encuentra en fase inicial de implementación. Actualmente se ha c
 SIPeIP/
 ├── backend/
 │   ├── apps/
-│   │   ├── usuarios/
-│   │   └── roles/
-│   ├── config/
+│   │   ├── roles/       # Módulo de administración de roles y permisos
+│   │   └── usuarios/    # Módulo de usuarios y autenticación base
+│   ├── config/          # Configuración core de Django y enrutamiento
 │   ├── manage.py
 │   ├── requirements.txt
 │   └── .env.example
 ├── frontend/
-├── docs/
-├── .github/
-│   └── workflows/
+│   ├── src/
+│   │   ├── services/    # Clientes HTTP para consumo de API
+│   │   ├── utils/       # Lógica compartida y validaciones
+│   │   ├── App.tsx      # Interfaz y componente principal
+│   │   └── index.css    # Estilos globales y reseteo
+│   ├── package.json
+│   └── vite.config.ts
+├── docs/                # Documentación adicional del proyecto
+├── .github/             # Configuración de flujos CI/CD
 └── README.md
 ```
 
-## Configuración del backend
+## Prerrequisitos
 
-Entrar a la carpeta del backend:
+Para ejecutar el entorno de desarrollo local, se requiere:
+
+- **Python** 3.11 o superior.
+- **Node.js** 18 o superior.
+- **PostgreSQL** instalado y ejecutándose (puerto por defecto 5432).
+
+## Configuración del entorno de desarrollo
+
+### 1. Base de datos
+
+Asegúrese de crear una base de datos PostgreSQL y disponer de credenciales válidas antes de iniciar el backend.
+
+### 2. Configuración del Backend (Django)
+
+Desde la raíz del proyecto, acceda a la carpeta del backend:
 
 ```bash
 cd backend
 ```
 
-Crear entorno virtual:
+Cree y active el entorno virtual (comandos para Windows PowerShell):
 
 ```bash
 py -3.11 -m venv .venv
-```
-
-Activar entorno virtual en Windows PowerShell:
-
-```bash
 .\.venv\Scripts\Activate.ps1
 ```
 
-Instalar dependencias:
+Instale las dependencias del sistema:
 
 ```bash
 python -m pip install -r requirements.txt
 ```
 
-Crear un archivo `.env` dentro de la carpeta `backend` tomando como base el archivo `.env.example`.
+Cree un archivo `.env` basado en la plantilla:
 
-Ejemplo de variables requeridas:
+```bash
+copy .env.example .env
+```
+
+Asegúrese de actualizar el archivo `.env` con las credenciales de su base de datos PostgreSQL local:
 
 ```env
-SECRET_KEY=change-me
+SECRET_KEY=su-clave-secreta-segura
 DEBUG=True
 
 DB_NAME=sipeip_db
-DB_USER=sipeip_user
-DB_PASSWORD=change-me
+DB_USER=su_usuario_pg
+DB_PASSWORD=su_password_pg
 DB_HOST=localhost
 DB_PORT=5432
 ```
 
-Ejecutar migraciones:
+Ejecute las migraciones iniciales de la base de datos:
 
 ```bash
 python manage.py migrate
 ```
 
-Crear superusuario:
+Cree un superusuario para acceso total:
 
 ```bash
 python manage.py createsuperuser
 ```
 
-Levantar servidor:
+Inicie el servidor de desarrollo en `http://127.0.0.1:8000/`:
 
 ```bash
 python manage.py runserver
 ```
 
-Acceso local:
+El panel administrativo nativo de Django está disponible en `http://127.0.0.1:8000/admin/`.
 
-```text
-http://127.0.0.1:8000/
+### 3. Configuración del Frontend (React + Vite)
+
+Abra una nueva terminal, y desde la raíz del proyecto acceda a la carpeta del frontend:
+
+```bash
+cd frontend
 ```
 
-Panel administrativo:
+Instale las dependencias de Node:
 
-```text
-http://127.0.0.1:8000/admin/
+```bash
+npm install
 ```
 
-## Módulos iniciales
+Inicie el servidor de desarrollo, por defecto en `http://localhost:5173/`:
 
-### Usuarios
-
-Permite administrar usuarios del sistema y mantener información básica como estado, rol y datos de acceso.
-
-### Roles
-
-Permite administrar los roles del sistema, los cuales serán utilizados para organizar permisos y responsabilidades.
-
-## Arquitectura
-
-El sistema se organiza bajo una arquitectura web cliente-servidor con separación entre frontend, backend y base de datos.
-
-```text
-Browser → React Frontend → Django REST API → PostgreSQL
+```bash
+npm run dev
 ```
 
-A nivel de código, el backend mantiene separación entre modelo, controlador y persistencia mediante Django y Django REST Framework. El frontend se desarrollará como la vista principal de interacción con el usuario.
+Para generar la versión de producción (build), ejecute:
 
-## Sprint actual
-
-Sprint 1:
-
-- Gestión de usuarios
-- Gestión de roles
-
-## Evidencia técnica actual
-
-Hasta el momento, el proyecto cuenta con:
-
-- Entorno virtual de Python configurado.
-- Proyecto Django creado.
-- Conexión a PostgreSQL configurada.
-- Modelos iniciales de Usuario y Rol.
-- Migraciones aplicadas.
-- Panel administrativo de Django funcionando.
-- Registro de módulos Usuarios y Roles en el panel administrativo.
-
-## Próximos pasos
-
-- Implementar serializers para usuarios y roles.
-- Implementar controladores CRUD con Django REST Framework.
-- Configurar rutas de API.
-- Crear frontend con React + Vite + TypeScript.
-- Implementar pantallas iniciales para usuarios y roles.
-- Agregar pruebas básicas del backend.
-- Configurar pipeline inicial con GitHub Actions.
+```bash
+npm run build
+```

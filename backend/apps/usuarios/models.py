@@ -3,11 +3,16 @@ from django.db import models
 
 
 class Usuario(AbstractUser):
+    """
+    Modelo de usuario personalizado que extiende AbstractUser de Django.
+    Incorpora la relación con el modelo Rol y estados personalizados para control de acceso.
+    """
     class EstadoUsuario(models.TextChoices):
         ACTIVO = "ACTIVO", "Activo"
         INACTIVO = "INACTIVO", "Inactivo"
         BLOQUEADO = "BLOQUEADO", "Bloqueado"
 
+    # Se usa PROTECT para evitar eliminar un rol si todavía tiene usuarios asignados.
     rol = models.ForeignKey(
         "roles.Rol",
         on_delete=models.PROTECT,
@@ -15,6 +20,7 @@ class Usuario(AbstractUser):
         null=True,
         blank=True,
     )
+    # Define la situación del usuario en el sistema. Debe sincronizarse con is_active de Django.
     estado = models.CharField(
         max_length=20,
         choices=EstadoUsuario.choices,

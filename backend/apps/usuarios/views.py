@@ -7,6 +7,12 @@ from .serializers import UsuarioSerializer
 
 
 class UsuarioViewSet(viewsets.ModelViewSet):
+    """
+    Controlador CRUD para la gestión de usuarios.
+    Permite el manejo de información del usuario y acciones directas para 
+    el control de estado de acceso (activar, bloquear).
+    """
+    # Se utiliza select_related('rol') para evitar el problema de N+1 queries.
     queryset = Usuario.objects.select_related("rol").all()
     serializer_class = UsuarioSerializer
     filter_backends = [
@@ -33,6 +39,7 @@ class UsuarioViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"])
     def activar(self, request, pk=None):
+        """Cambia el estado del usuario a activo y permite el inicio de sesión."""
         usuario = self.get_object()
         usuario.estado = Usuario.EstadoUsuario.ACTIVO
         usuario.is_active = True
@@ -43,6 +50,7 @@ class UsuarioViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"])
     def bloquear(self, request, pk=None):
+        """Cambia el estado a bloqueado e impide futuros inicios de sesión."""
         usuario = self.get_object()
         usuario.estado = Usuario.EstadoUsuario.BLOQUEADO
         usuario.is_active = False

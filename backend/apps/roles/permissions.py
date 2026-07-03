@@ -1,3 +1,7 @@
+"""
+Catálogo centralizado de permisos del sistema.
+Cualquier permiso asignado a un rol debe existir en esta lista.
+"""
 ALLOWED_ROLE_PERMISSIONS = [
     "usuarios.ver",
     "usuarios.crear",

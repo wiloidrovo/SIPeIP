@@ -1,5 +1,8 @@
 const API_BASE_URL = "http://127.0.0.1:8000/api";
 
+/**
+ * Representa un rol en el sistema, encargado de agrupar permisos.
+ */
 export type Rol = {
   id: number;
   nombre: string;
@@ -11,6 +14,9 @@ export type Rol = {
   fecha_actualizacion: string;
 };
 
+/**
+ * Representa un usuario del sistema y sus credenciales de acceso.
+ */
 export type Usuario = {
   id: number;
   username: string;
@@ -83,6 +89,9 @@ function formatApiError(error: unknown): string {
   return "Error en la solicitud.";
 }
 
+/**
+ * Servicio de comunicación con la API para la gestión de Roles.
+ */
 export const rolesApi = {
   listar: () => request<Rol[]>("/roles/"),
 
@@ -123,6 +132,9 @@ export const rolesApi = {
     }),
 };
 
+/**
+ * Servicio de comunicación con la API para la gestión de Usuarios.
+ */
 export const usuariosApi = {
   listar: () => request<Usuario[]>("/usuarios/"),
 

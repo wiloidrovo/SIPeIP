@@ -1,3 +1,6 @@
+/**
+ * Interfaz estándar para el resultado de validaciones en formularios.
+ */
 export type ValidationResult = {
   valid: boolean;
   message: string;
@@ -17,6 +20,10 @@ function fail(message: string): ValidationResult {
   };
 }
 
+/**
+ * Valida los datos del formulario de roles.
+ * Comprueba longitud, caracteres permitidos y campos obligatorios.
+ */
 export function validateRolForm(data: {
   nombre: string;
   descripcion: string;
@@ -47,6 +54,10 @@ export function validateRolForm(data: {
   return ok();
 }
 
+/**
+ * Valida los datos del formulario de usuarios.
+ * Incluye comprobación de contraseñas seguras, formato de email y número de teléfono ecuatoriano.
+ */
 export function validateUsuarioForm(data: {
   username: string;
   email: string;

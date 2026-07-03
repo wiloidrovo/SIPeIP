@@ -7,6 +7,11 @@ from .serializers import RolSerializer
 
 
 class RolViewSet(viewsets.ModelViewSet):
+    """
+    Controlador CRUD para la gestión de roles.
+    Expone operaciones de búsqueda, ordenamiento y endpoints personalizados
+    para cambio de estado y asignación de permisos.
+    """
     queryset = Rol.objects.all()
     serializer_class = RolSerializer
     filter_backends = [
@@ -28,6 +33,10 @@ class RolViewSet(viewsets.ModelViewSet):
     ]
 
     def destroy(self, request, *args, **kwargs):
+        """
+        Sobrescribe la eliminación para proteger la integridad referencial.
+        No permite eliminar roles que tengan usuarios asignados.
+        """
         rol = self.get_object()
         usuarios_count = rol.usuarios.count()
 
@@ -47,6 +56,7 @@ class RolViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"], url_path="asignar-permisos")
     def asignar_permisos(self, request, pk=None):
+        """Asigna una lista de permisos al rol validándolos previamente."""
         rol = self.get_object()
         permisos = request.data.get("permisos", [])
 
@@ -62,6 +72,7 @@ class RolViewSet(viewsets.ModelViewSet):
     
     @action(detail=True, methods=["post"])
     def activar(self, request, pk=None):
+        """Cambia el estado del rol a activo."""
         rol = self.get_object()
         rol.activo = True
         rol.save(update_fields=["activo", "fecha_actualizacion"])
@@ -72,6 +83,7 @@ class RolViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"])
     def desactivar(self, request, pk=None):
+        """Cambia el estado del rol a inactivo."""
         rol = self.get_object()
         rol.activo = False
         rol.save(update_fields=["activo", "fecha_actualizacion"])

@@ -1,3 +1,4 @@
+"""Enrutamiento principal de la API. Conecta las aplicaciones del sistema."""
 from django.contrib import admin
 from django.urls import include, path
 

@@ -137,8 +137,10 @@ STATIC_URL = 'static/'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+# Indica a Django que utilice el modelo personalizado para la gestión de usuarios.
 AUTH_USER_MODEL = "usuarios.Usuario"
 
+# Orígenes permitidos para peticiones CORS. En desarrollo se permite el servidor local de Vite.
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
 ]

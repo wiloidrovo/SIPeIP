@@ -7,6 +7,10 @@ import re
 
 
 class UsuarioSerializer(serializers.ModelSerializer):
+    """
+    Serializador principal para la gestión de Usuarios.
+    Maneja la creación y actualización segura de contraseñas y la sincronización de estados.
+    """
     rol_detalle = RolSerializer(source="rol", read_only=True)
     email = serializers.EmailField(
         required=True,
@@ -18,6 +22,7 @@ class UsuarioSerializer(serializers.ModelSerializer):
         },
     )
 
+    # El password solo se puede escribir, nunca se incluye en las respuestas GET.
     password = serializers.CharField(
         write_only=True,
         required=False,
@@ -58,6 +63,7 @@ class UsuarioSerializer(serializers.ModelSerializer):
             "is_staff",
             "date_joined",
         ]
+        # Campos gestionados internamente o mediante endpoints de estado.
         read_only_fields = [
             "id",
             "date_joined",
@@ -65,6 +71,7 @@ class UsuarioSerializer(serializers.ModelSerializer):
         ]
 
     def validate_username(self, value):
+        """Valida que el nombre de usuario no esté vacío y sea único."""
         username = value.strip()
 
         if not username:
@@ -81,6 +88,7 @@ class UsuarioSerializer(serializers.ModelSerializer):
         return username
 
     def validate_email(self, value):
+        """Asegura unicidad del correo ignorando mayúsculas/minúsculas."""
         email = value.strip().lower()
 
         queryset = Usuario.objects.filter(email__iexact=email)
@@ -100,6 +108,7 @@ class UsuarioSerializer(serializers.ModelSerializer):
         return value.strip() if value else ""
 
     def validate_telefono(self, value):
+        """Aplica validación de formato para celular ecuatoriano (10 dígitos, inicia en 09)."""
         telefono = value.strip() if value else ""
 
         if not telefono:
@@ -113,6 +122,7 @@ class UsuarioSerializer(serializers.ModelSerializer):
         return telefono
 
     def validate_rol(self, value):
+        """Impide asignar un rol que actualmente esté desactivado."""
         if value and not value.activo:
             raise serializers.ValidationError("No se puede asignar un rol inactivo.")
 
@@ -133,6 +143,10 @@ class UsuarioSerializer(serializers.ModelSerializer):
         return attrs
 
     def _sincronizar_estado_activo(self, usuario):
+        """
+        Sincroniza el campo `estado` (custom) con `is_active` (Django auth) 
+        para asegurar que el usuario no pueda iniciar sesión si está inactivo/bloqueado.
+        """
         if usuario.estado == Usuario.EstadoUsuario.ACTIVO:
             usuario.is_active = True
 
