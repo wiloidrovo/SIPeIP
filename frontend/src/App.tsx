@@ -22,6 +22,9 @@ function App() {
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [mensaje, setMensaje] = useState("");
   const [cargando, setCargando] = useState(false);
+  const [permisosPorRol, setPermisosPorRol] = useState<
+    Record<number, string[]>
+  >({});
 
   const [rolForm, setRolForm] = useState({
     nombre: "",
@@ -42,9 +45,12 @@ function App() {
     is_staff: false,
   });
 
-  async function cargarDatos() {
+  async function cargarDatos(limpiarMensaje = true) {
     setCargando(true);
-    setMensaje("");
+
+    if (limpiarMensaje) {
+      setMensaje("");
+    }
 
     try {
       const [rolesData, usuariosData] = await Promise.all([
@@ -54,6 +60,16 @@ function App() {
 
       setRoles(rolesData);
       setUsuarios(usuariosData);
+
+      const permisosIniciales = rolesData.reduce<Record<number, string[]>>(
+        (acumulador, rol) => {
+          acumulador[rol.id] = rol.permisos || [];
+          return acumulador;
+        },
+        {},
+      );
+
+      setPermisosPorRol(permisosIniciales);
     } catch (error) {
       setMensaje("No se pudieron cargar los datos desde el backend.");
     } finally {
@@ -97,15 +113,35 @@ function App() {
     }
   }
 
-  async function asignarPermisos(id: number) {
-    try {
-      const rolActualizado = await rolesApi.asignarPermisos(id, permisosBase);
+  function alternarPermiso(rolId: number, permiso: string) {
+    setPermisosPorRol((estadoActual) => {
+      const permisosActuales = estadoActual[rolId] || [];
 
-      setMensaje(
-        `Permisos asignados correctamente al rol ${rolActualizado.nombre}. Total: ${rolActualizado.permisos.length}.`,
+      const permisosActualizados = permisosActuales.includes(permiso)
+        ? permisosActuales.filter((permisoActual) => permisoActual !== permiso)
+        : [...permisosActuales, permiso];
+
+      return {
+        ...estadoActual,
+        [rolId]: permisosActualizados,
+      };
+    });
+  }
+
+  async function asignarPermisos(id: number) {
+    const permisosSeleccionados = permisosPorRol[id] || [];
+
+    try {
+      const rolActualizado = await rolesApi.asignarPermisos(
+        id,
+        permisosSeleccionados,
       );
 
-      await cargarDatos();
+      await cargarDatos(false);
+
+      setMensaje(
+        `Permisos actualizados para el rol ${rolActualizado.nombre}. Total: ${rolActualizado.permisos.length}.`,
+      );
     } catch (error) {
       setMensaje(
         error instanceof Error
@@ -115,7 +151,42 @@ function App() {
     }
   }
 
+  async function activarRol(id: number) {
+    try {
+      await rolesApi.activar(id);
+      setMensaje("Rol activado correctamente.");
+      await cargarDatos();
+    } catch (error) {
+      setMensaje(
+        error instanceof Error ? error.message : "No se pudo activar el rol.",
+      );
+    }
+  }
+
+  async function desactivarRol(id: number) {
+    try {
+      await rolesApi.desactivar(id);
+      setMensaje("Rol desactivado correctamente.");
+      await cargarDatos();
+    } catch (error) {
+      setMensaje(
+        error instanceof Error
+          ? error.message
+          : "No se pudo desactivar el rol.",
+      );
+    }
+  }
+
   async function eliminarRol(id: number) {
+    const rol = roles.find((item) => item.id === id);
+
+    if (rol && rol.usuarios_count > 0) {
+      setMensaje(
+        `No se puede eliminar el rol ${rol.nombre} porque está asignado a ${rol.usuarios_count} usuario(s). Desactive el rol o reasigne los usuarios antes de eliminarlo.`,
+      );
+      return;
+    }
+
     const confirmar = window.confirm("¿Desea eliminar este rol?");
 
     if (!confirmar) {
@@ -124,10 +195,12 @@ function App() {
 
     try {
       await rolesApi.eliminar(id);
+      await cargarDatos(false);
       setMensaje("Rol eliminado correctamente.");
-      await cargarDatos();
     } catch (error) {
-      setMensaje(error instanceof Error ? error.message : "Ocurrió un error.");
+      setMensaje(
+        error instanceof Error ? error.message : "No se pudo eliminar el rol.",
+      );
     }
   }
 
@@ -222,7 +295,7 @@ function App() {
           </p>
         </div>
 
-        <button type="button" onClick={cargarDatos}>
+        <button type="button" onClick={() => cargarDatos()}>
           {cargando ? "Cargando..." : "Actualizar datos"}
         </button>
       </section>
@@ -292,7 +365,8 @@ function App() {
             <label>
               Correo
               <input
-                type="email"
+                type="text"
+                inputMode="email"
                 value={usuarioForm.email}
                 onChange={(event) =>
                   setUsuarioForm({ ...usuarioForm, email: event.target.value })
@@ -388,6 +462,7 @@ function App() {
                 <th>Descripción</th>
                 <th>Activo</th>
                 <th>Permisos</th>
+                <th>Usuarios</th>
                 <th>Acciones</th>
               </tr>
             </thead>
@@ -399,17 +474,54 @@ function App() {
                   <td>{rol.nombre}</td>
                   <td>{rol.descripcion || "Sin descripción"}</td>
                   <td>{rol.activo ? "Sí" : "No"}</td>
-                  <td>{rol.permisos?.length || 0}</td>
+                  <td>
+                    <div className="permissions-selector">
+                      {permisosBase.map((permiso) => (
+                        <label key={permiso} className="permission-option">
+                          <input
+                            type="checkbox"
+                            checked={(permisosPorRol[rol.id] || []).includes(
+                              permiso,
+                            )}
+                            onChange={() => alternarPermiso(rol.id, permiso)}
+                          />
+                          <span>{permiso}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </td>
+                  <td>{rol.usuarios_count}</td>
                   <td className="actions">
                     <button
                       type="button"
                       onClick={() => asignarPermisos(rol.id)}
                     >
-                      Asignar permisos
+                      Guardar permisos
                     </button>
+
+                    {rol.activo ? (
+                      <button
+                        type="button"
+                        className="secondary"
+                        onClick={() => desactivarRol(rol.id)}
+                      >
+                        Desactivar
+                      </button>
+                    ) : (
+                      <button type="button" onClick={() => activarRol(rol.id)}>
+                        Activar
+                      </button>
+                    )}
+
                     <button
                       type="button"
                       className="danger"
+                      disabled={rol.usuarios_count > 0}
+                      title={
+                        rol.usuarios_count > 0
+                          ? "No se puede eliminar un rol asignado a usuarios."
+                          : "Eliminar rol"
+                      }
                       onClick={() => eliminarRol(rol.id)}
                     >
                       Eliminar

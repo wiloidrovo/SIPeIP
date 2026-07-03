@@ -5,6 +5,8 @@ from .permissions import ALLOWED_ROLE_PERMISSIONS
 
 
 class RolSerializer(serializers.ModelSerializer):
+    usuarios_count = serializers.SerializerMethodField()
+
     class Meta:
         model = Rol
         fields = [
@@ -13,14 +15,19 @@ class RolSerializer(serializers.ModelSerializer):
             "descripcion",
             "activo",
             "permisos",
+            "usuarios_count",
             "fecha_creacion",
             "fecha_actualizacion",
         ]
         read_only_fields = [
             "id",
+            "usuarios_count",
             "fecha_creacion",
             "fecha_actualizacion",
         ]
+
+    def get_usuarios_count(self, obj):
+        return obj.usuarios.count()
 
     def validate_nombre(self, value):
         nombre = value.strip()

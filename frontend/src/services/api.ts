@@ -6,6 +6,7 @@ export type Rol = {
   descripcion: string;
   activo: boolean;
   permisos: string[];
+  usuarios_count: number;
   fecha_creacion: string;
   fecha_actualizacion: string;
 };
@@ -100,6 +101,16 @@ export const rolesApi = {
     request<Rol>(`/roles/${id}/asignar-permisos/`, {
       method: "POST",
       body: JSON.stringify({ permisos }),
+    }),
+
+  activar: (id: number) =>
+    request<Rol>(`/roles/${id}/activar/`, {
+      method: "POST",
+    }),
+
+  desactivar: (id: number) =>
+    request<Rol>(`/roles/${id}/desactivar/`, {
+      method: "POST",
     }),
 };
 

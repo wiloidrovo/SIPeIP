@@ -1,19 +1,44 @@
 from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
-
+from apps.roles.models import Rol
 from apps.roles.serializers import RolSerializer
-
 from .models import Usuario
+import re
 
 
 class UsuarioSerializer(serializers.ModelSerializer):
     rol_detalle = RolSerializer(source="rol", read_only=True)
-    email = serializers.EmailField(required=False, allow_blank=True)
+    email = serializers.EmailField(
+        required=True,
+        allow_blank=False,
+        error_messages={
+            "required": "El correo es obligatorio.",
+            "blank": "El correo es obligatorio.",
+            "invalid": "Ingrese un correo válido.",
+        },
+    )
+
     password = serializers.CharField(
         write_only=True,
         required=False,
         allow_blank=True,
         min_length=8,
+        error_messages={
+            "min_length": "La contraseña debe tener al menos 8 caracteres.",
+            "blank": "La contraseña es obligatoria.",
+        },
+    )
+
+    rol = serializers.PrimaryKeyRelatedField(
+        queryset=Rol.objects.filter(activo=True),
+        required=True,
+        allow_null=False,
+        error_messages={
+            "required": "Debe seleccionar un rol.",
+            "null": "Debe seleccionar un rol.",
+            "does_not_exist": "El rol seleccionado no existe o no está activo.",
+            "incorrect_type": "El rol seleccionado no es válido.",
+        },
     )
 
     class Meta:
@@ -56,10 +81,7 @@ class UsuarioSerializer(serializers.ModelSerializer):
         return username
 
     def validate_email(self, value):
-        email = value.strip().lower() if value else ""
-
-        if not email:
-            return ""
+        email = value.strip().lower()
 
         queryset = Usuario.objects.filter(email__iexact=email)
 
@@ -80,8 +102,13 @@ class UsuarioSerializer(serializers.ModelSerializer):
     def validate_telefono(self, value):
         telefono = value.strip() if value else ""
 
-        if telefono and len(telefono) < 7:
-            raise serializers.ValidationError("El teléfono debe tener al menos 7 caracteres.")
+        if not telefono:
+            return ""
+
+        if not re.fullmatch(r"09\d{8}", telefono):
+            raise serializers.ValidationError(
+                "Ingrese un número celular ecuatoriano válido: debe tener 10 dígitos e iniciar con 09."
+            )
 
         return telefono
 

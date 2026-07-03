@@ -101,8 +101,10 @@ export function validateUsuarioForm(data: {
     return fail("Debe seleccionar un rol para el usuario.");
   }
 
-  if (telefono && !/^[0-9+\-\s]{7,20}$/.test(telefono)) {
-    return fail("Ingrese un teléfono válido.");
+  if (telefono && !/^09\d{8}$/.test(telefono)) {
+    return fail(
+      "Ingrese un número celular ecuatoriano válido: debe tener 10 dígitos e iniciar con 09.",
+    );
   }
 
   return ok();
