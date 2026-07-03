@@ -112,6 +112,15 @@ export const rolesApi = {
     request<Rol>(`/roles/${id}/desactivar/`, {
       method: "POST",
     }),
+
+  actualizar: (
+    id: number,
+    data: Partial<Pick<Rol, "nombre" | "descripcion" | "activo" | "permisos">>,
+  ) =>
+    request<Rol>(`/roles/${id}/`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
 };
 
 export const usuariosApi = {
@@ -131,6 +140,26 @@ export const usuariosApi = {
   }) =>
     request<Usuario>("/usuarios/", {
       method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  actualizar: (
+    id: number,
+    data: Partial<{
+      username: string;
+      email: string;
+      first_name: string;
+      last_name: string;
+      password: string;
+      rol: number | null;
+      estado: "ACTIVO" | "INACTIVO" | "BLOQUEADO";
+      telefono: string;
+      is_active: boolean;
+      is_staff: boolean;
+    }>,
+  ) =>
+    request<Usuario>(`/usuarios/${id}/`, {
+      method: "PATCH",
       body: JSON.stringify(data),
     }),
 

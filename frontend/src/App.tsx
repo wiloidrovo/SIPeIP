@@ -26,6 +26,14 @@ function App() {
     Record<number, string[]>
   >({});
 
+  const [busquedaRoles, setBusquedaRoles] = useState("");
+  const [busquedaUsuarios, setBusquedaUsuarios] = useState("");
+
+  const [rolEditandoId, setRolEditandoId] = useState<number | null>(null);
+  const [usuarioEditandoId, setUsuarioEditandoId] = useState<number | null>(
+    null,
+  );
+
   const [rolForm, setRolForm] = useState({
     nombre: "",
     descripcion: "",
@@ -43,6 +51,17 @@ function App() {
     telefono: "",
     is_active: true,
     is_staff: false,
+  });
+
+  const rolesFiltrados = roles.filter((rol) => {
+    const texto = `${rol.nombre} ${rol.descripcion}`.toLowerCase();
+    return texto.includes(busquedaRoles.toLowerCase().trim());
+  });
+
+  const usuariosFiltrados = usuarios.filter((usuario) => {
+    const texto =
+      `${usuario.username} ${usuario.email} ${usuario.first_name} ${usuario.last_name} ${usuario.estado} ${usuario.rol_detalle?.nombre || ""}`.toLowerCase();
+    return texto.includes(busquedaUsuarios.toLowerCase().trim());
   });
 
   async function cargarDatos(limpiarMensaje = true) {
@@ -92,11 +111,24 @@ function App() {
     }
 
     try {
-      await rolesApi.crear({
-        nombre: rolForm.nombre.trim(),
-        descripcion: rolForm.descripcion.trim(),
-        activo: rolForm.activo,
-      });
+      if (rolEditandoId) {
+        await rolesApi.actualizar(rolEditandoId, {
+          nombre: rolForm.nombre.trim(),
+          descripcion: rolForm.descripcion.trim(),
+          activo: rolForm.activo,
+        });
+
+        setMensaje("Rol actualizado correctamente.");
+        setRolEditandoId(null);
+      } else {
+        await rolesApi.crear({
+          nombre: rolForm.nombre.trim(),
+          descripcion: rolForm.descripcion.trim(),
+          activo: rolForm.activo,
+        });
+
+        setMensaje("Rol creado correctamente.");
+      }
 
       setRolForm({
         nombre: "",
@@ -104,13 +136,32 @@ function App() {
         activo: true,
       });
 
-      setMensaje("Rol creado correctamente.");
-      await cargarDatos();
+      await cargarDatos(false);
     } catch (error) {
       setMensaje(
-        error instanceof Error ? error.message : "No se pudo crear el rol.",
+        error instanceof Error ? error.message : "No se pudo guardar el rol.",
       );
     }
+  }
+
+  function cargarRolParaEditar(rol: Rol) {
+    setRolEditandoId(rol.id);
+    setRolForm({
+      nombre: rol.nombre,
+      descripcion: rol.descripcion,
+      activo: rol.activo,
+    });
+    setMensaje(`Editando rol ${rol.nombre}.`);
+  }
+
+  function cancelarEdicionRol() {
+    setRolEditandoId(null);
+    setRolForm({
+      nombre: "",
+      descripcion: "",
+      activo: true,
+    });
+    setMensaje("");
   }
 
   function alternarPermiso(rolId: number, permiso: string) {
@@ -207,7 +258,13 @@ function App() {
   async function crearUsuario(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    const validation = validateUsuarioForm(usuarioForm);
+    const validation = validateUsuarioForm({
+      ...usuarioForm,
+      password:
+        usuarioEditandoId && !usuarioForm.password
+          ? "Password123"
+          : usuarioForm.password,
+    });
 
     if (!validation.valid) {
       setMensaje(validation.message);
@@ -215,15 +272,30 @@ function App() {
     }
 
     try {
-      await usuariosApi.crear({
-        ...usuarioForm,
+      const payload = {
         username: usuarioForm.username.trim(),
         email: usuarioForm.email.trim(),
         first_name: usuarioForm.first_name.trim(),
         last_name: usuarioForm.last_name.trim(),
         telefono: usuarioForm.telefono.trim(),
         rol: Number(usuarioForm.rol),
-      });
+        estado: usuarioForm.estado,
+        is_active: usuarioForm.is_active,
+        is_staff: usuarioForm.is_staff,
+        ...(usuarioForm.password ? { password: usuarioForm.password } : {}),
+      };
+
+      if (usuarioEditandoId) {
+        await usuariosApi.actualizar(usuarioEditandoId, payload);
+        setMensaje("Usuario actualizado correctamente.");
+        setUsuarioEditandoId(null);
+      } else {
+        await usuariosApi.crear({
+          ...payload,
+          password: usuarioForm.password,
+        });
+        setMensaje("Usuario creado correctamente.");
+      }
 
       setUsuarioForm({
         username: "",
@@ -238,13 +310,48 @@ function App() {
         is_staff: false,
       });
 
-      setMensaje("Usuario creado correctamente.");
-      await cargarDatos();
+      await cargarDatos(false);
     } catch (error) {
       setMensaje(
-        error instanceof Error ? error.message : "No se pudo crear el usuario.",
+        error instanceof Error
+          ? error.message
+          : "No se pudo guardar el usuario.",
       );
     }
+  }
+
+  function cargarUsuarioParaEditar(usuario: Usuario) {
+    setUsuarioEditandoId(usuario.id);
+    setUsuarioForm({
+      username: usuario.username,
+      email: usuario.email,
+      first_name: usuario.first_name,
+      last_name: usuario.last_name,
+      password: "",
+      rol: usuario.rol ? String(usuario.rol) : "",
+      estado: usuario.estado,
+      telefono: usuario.telefono,
+      is_active: usuario.is_active,
+      is_staff: usuario.is_staff,
+    });
+    setMensaje(`Editando usuario ${usuario.username}.`);
+  }
+
+  function cancelarEdicionUsuario() {
+    setUsuarioEditandoId(null);
+    setUsuarioForm({
+      username: "",
+      email: "",
+      first_name: "",
+      last_name: "",
+      password: "",
+      rol: "",
+      estado: "ACTIVO",
+      telefono: "",
+      is_active: true,
+      is_staff: false,
+    });
+    setMensaje("");
   }
 
   async function activarUsuario(id: number) {
@@ -340,7 +447,19 @@ function App() {
               Rol activo
             </label>
 
-            <button type="submit">Guardar rol</button>
+            <button type="submit">
+              {rolEditandoId ? "Actualizar rol" : "Guardar rol"}
+            </button>
+
+            {rolEditandoId && (
+              <button
+                type="button"
+                className="secondary"
+                onClick={cancelarEdicionRol}
+              >
+                Cancelar edición
+              </button>
+            )}
           </form>
         </div>
 
@@ -424,11 +543,15 @@ function App() {
                 }
               >
                 <option value="">Sin rol</option>
-                {roles.map((rol) => (
-                  <option key={rol.id} value={rol.id}>
-                    {rol.nombre}
-                  </option>
-                ))}
+                {roles
+                  .filter(
+                    (rol) => rol.activo || String(rol.id) === usuarioForm.rol,
+                  )
+                  .map((rol) => (
+                    <option key={rol.id} value={rol.id}>
+                      {rol.nombre}
+                    </option>
+                  ))}
               </select>
             </label>
 
@@ -445,13 +568,33 @@ function App() {
               />
             </label>
 
-            <button type="submit">Guardar usuario</button>
+            <button type="submit">
+              {usuarioEditandoId ? "Actualizar usuario" : "Guardar usuario"}
+            </button>
+
+            {usuarioEditandoId && (
+              <button
+                type="button"
+                className="secondary"
+                onClick={cancelarEdicionUsuario}
+              >
+                Cancelar edición
+              </button>
+            )}
           </form>
         </div>
       </section>
 
       <section className="card">
         <h2>Roles registrados</h2>
+
+        <div className="toolbar">
+          <input
+            value={busquedaRoles}
+            onChange={(event) => setBusquedaRoles(event.target.value)}
+            placeholder="Buscar rol por nombre o descripción..."
+          />
+        </div>
 
         <div className="table-wrapper">
           <table>
@@ -468,7 +611,7 @@ function App() {
             </thead>
 
             <tbody>
-              {roles.map((rol) => (
+              {rolesFiltrados.map((rol) => (
                 <tr key={rol.id}>
                   <td>{rol.id}</td>
                   <td>{rol.nombre}</td>
@@ -491,7 +634,15 @@ function App() {
                     </div>
                   </td>
                   <td>{rol.usuarios_count}</td>
+
                   <td className="actions">
+                    <button
+                      type="button"
+                      onClick={() => cargarRolParaEditar(rol)}
+                    >
+                      Editar
+                    </button>
+
                     <button
                       type="button"
                       onClick={() => asignarPermisos(rol.id)}
@@ -530,9 +681,9 @@ function App() {
                 </tr>
               ))}
 
-              {roles.length === 0 && (
+              {rolesFiltrados.length === 0 && (
                 <tr>
-                  <td colSpan={6}>No existen roles registrados.</td>
+                  <td colSpan={7}>No existen roles registrados.</td>
                 </tr>
               )}
             </tbody>
@@ -542,6 +693,14 @@ function App() {
 
       <section className="card">
         <h2>Usuarios registrados</h2>
+
+        <div className="toolbar">
+          <input
+            value={busquedaUsuarios}
+            onChange={(event) => setBusquedaUsuarios(event.target.value)}
+            placeholder="Buscar usuario por nombre, correo, rol o estado..."
+          />
+        </div>
 
         <div className="table-wrapper">
           <table>
@@ -559,7 +718,7 @@ function App() {
             </thead>
 
             <tbody>
-              {usuarios.map((usuario) => (
+              {usuariosFiltrados.map((usuario) => (
                 <tr key={usuario.id}>
                   <td>{usuario.id}</td>
                   <td>{usuario.username}</td>
@@ -571,6 +730,12 @@ function App() {
                   <td>{usuario.estado}</td>
                   <td>{usuario.is_active ? "Sí" : "No"}</td>
                   <td className="actions">
+                    <button
+                      type="button"
+                      onClick={() => cargarUsuarioParaEditar(usuario)}
+                    >
+                      Editar
+                    </button>
                     <button
                       type="button"
                       onClick={() => activarUsuario(usuario.id)}
@@ -594,7 +759,7 @@ function App() {
                 </tr>
               ))}
 
-              {usuarios.length === 0 && (
+              {usuariosFiltrados.length === 0 && (
                 <tr>
                   <td colSpan={8}>No existen usuarios registrados.</td>
                 </tr>
