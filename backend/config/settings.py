@@ -48,6 +48,7 @@ INSTALLED_APPS = [
 
     'apps.roles',
     'apps.usuarios',
+    'apps.planes',
 ]
 
 MIDDLEWARE = [
