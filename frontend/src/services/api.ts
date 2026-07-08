@@ -32,6 +32,25 @@ export type Usuario = {
   date_joined: string;
 };
 
+export type Plan = {
+  id: number;
+  nombre: string;
+  descripcion: string;
+  periodo_inicio: string;
+  periodo_fin: string;
+  responsable: number | null;
+  responsable_detalle: {
+    id: number;
+    username: string;
+    nombre_completo: string;
+    email: string;
+  } | null;
+  estado: "BORRADOR" | "EN_REVISION" | "APROBADO" | "RECHAZADO" | "ARCHIVADO";
+  activo: boolean;
+  fecha_creacion: string;
+  fecha_actualizacion: string;
+};
+
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${url}`, {
     headers: {
@@ -51,6 +70,12 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
     : await response.text();
 
   if (!response.ok) {
+    if (typeof data === "string" && data.trim().startsWith("<!DOCTYPE html")) {
+      throw new Error(
+        "Ocurrió un error interno en el servidor. Revise la consola del backend.",
+      );
+    }
+
     throw new Error(formatApiError(data));
   }
 
@@ -187,6 +212,62 @@ export const usuariosApi = {
 
   bloquear: (id: number) =>
     request<Usuario>(`/usuarios/${id}/bloquear/`, {
+      method: "POST",
+    }),
+};
+
+export const planesApi = {
+  listar: () => request<Plan[]>("/planes/"),
+
+  crear: (
+    data: Pick<
+      Plan,
+      | "nombre"
+      | "descripcion"
+      | "periodo_inicio"
+      | "periodo_fin"
+      | "responsable"
+      | "estado"
+      | "activo"
+    >,
+  ) =>
+    request<Plan>("/planes/", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  actualizar: (
+    id: number,
+    data: Partial<
+      Pick<
+        Plan,
+        | "nombre"
+        | "descripcion"
+        | "periodo_inicio"
+        | "periodo_fin"
+        | "responsable"
+        | "estado"
+        | "activo"
+      >
+    >,
+  ) =>
+    request<Plan>(`/planes/${id}/`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+
+  eliminar: (id: number) =>
+    request<null>(`/planes/${id}/`, {
+      method: "DELETE",
+    }),
+
+  enviarARevision: (id: number) =>
+    request<Plan>(`/planes/${id}/enviar-a-revision/`, {
+      method: "POST",
+    }),
+
+  archivar: (id: number) =>
+    request<Plan>(`/planes/${id}/archivar/`, {
       method: "POST",
     }),
 };

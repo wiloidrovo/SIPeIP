@@ -1,9 +1,13 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import "./App.css";
-import type { Rol, Usuario } from "./services/api";
-import { rolesApi, usuariosApi } from "./services/api";
-import { validateRolForm, validateUsuarioForm } from "./utils/validation";
+import type { Plan, Rol, Usuario } from "./services/api";
+import { planesApi, rolesApi, usuariosApi } from "./services/api";
+import {
+  validatePlanForm,
+  validateRolForm,
+  validateUsuarioForm,
+} from "./utils/validation";
 
 const permisosBase = [
   "usuarios.ver",
@@ -25,6 +29,7 @@ const permisosBase = [
 function App() {
   const [roles, setRoles] = useState<Rol[]>([]);
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
+  const [planes, setPlanes] = useState<Plan[]>([]);
   const [mensaje, setMensaje] = useState("");
   const [cargando, setCargando] = useState(false);
   const [permisosPorRol, setPermisosPorRol] = useState<
@@ -33,11 +38,13 @@ function App() {
 
   const [busquedaRoles, setBusquedaRoles] = useState("");
   const [busquedaUsuarios, setBusquedaUsuarios] = useState("");
+  const [busquedaPlanes, setBusquedaPlanes] = useState("");
 
   const [rolEditandoId, setRolEditandoId] = useState<number | null>(null);
   const [usuarioEditandoId, setUsuarioEditandoId] = useState<number | null>(
     null,
   );
+  const [planEditandoId, setPlanEditandoId] = useState<number | null>(null);
 
   const [rolForm, setRolForm] = useState({
     nombre: "",
@@ -58,6 +65,16 @@ function App() {
     is_staff: false,
   });
 
+  const [planForm, setPlanForm] = useState({
+    nombre: "",
+    descripcion: "",
+    periodo_inicio: "",
+    periodo_fin: "",
+    responsable: "",
+    estado: "BORRADOR" as Plan["estado"],
+    activo: true,
+  });
+
   // Filtra en memoria los roles según el texto de búsqueda ingresado
   const rolesFiltrados = roles.filter((rol) => {
     const texto = `${rol.nombre} ${rol.descripcion}`.toLowerCase();
@@ -71,6 +88,17 @@ function App() {
     return texto.includes(busquedaUsuarios.toLowerCase().trim());
   });
 
+  const planesFiltrados = planes.filter((plan) => {
+    const texto =
+      `${plan.nombre} ${plan.descripcion} ${plan.estado} ${plan.responsable_detalle?.nombre_completo || ""}`.toLowerCase();
+
+    return texto.includes(busquedaPlanes.toLowerCase().trim());
+  });
+
+  function contarPlanesAsignadosUsuario(usuarioId: number) {
+    return planes.filter((plan) => plan.responsable === usuarioId).length;
+  }
+
   /**
    * Obtiene la lista actualizada de roles y usuarios desde la API.
    * Inicializa el estado local de permisos por rol para la vista de checkboxes.
@@ -83,13 +111,15 @@ function App() {
     }
 
     try {
-      const [rolesData, usuariosData] = await Promise.all([
+      const [rolesData, usuariosData, planesData] = await Promise.all([
         rolesApi.listar(),
         usuariosApi.listar(),
+        planesApi.listar(),
       ]);
 
       setRoles(rolesData);
       setUsuarios(usuariosData);
+      setPlanes(planesData);
 
       const permisosIniciales = rolesData.reduce<Record<number, string[]>>(
         (acumulador, rol) => {
@@ -417,6 +447,132 @@ function App() {
     }
   }
 
+  async function crearPlan(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const validation = validatePlanForm(planForm);
+
+    if (!validation.valid) {
+      setMensaje(validation.message);
+      return;
+    }
+
+    try {
+      const payload = {
+        nombre: planForm.nombre.trim(),
+        descripcion: planForm.descripcion.trim(),
+        periodo_inicio: planForm.periodo_inicio,
+        periodo_fin: planForm.periodo_fin,
+        responsable: planForm.responsable ? Number(planForm.responsable) : null,
+        estado: planForm.estado,
+        activo: planForm.activo,
+      };
+
+      if (planEditandoId) {
+        await planesApi.actualizar(planEditandoId, payload);
+        setMensaje("Plan actualizado correctamente.");
+        setPlanEditandoId(null);
+      } else {
+        await planesApi.crear(payload);
+        setMensaje("Plan creado correctamente.");
+      }
+
+      setPlanForm({
+        nombre: "",
+        descripcion: "",
+        periodo_inicio: "",
+        periodo_fin: "",
+        responsable: "",
+        estado: "BORRADOR",
+        activo: true,
+      });
+
+      await cargarDatos(false);
+    } catch (error) {
+      setMensaje(
+        error instanceof Error ? error.message : "No se pudo guardar el plan.",
+      );
+    }
+  }
+
+  function cargarPlanParaEditar(plan: Plan) {
+    setPlanEditandoId(plan.id);
+    setPlanForm({
+      nombre: plan.nombre,
+      descripcion: plan.descripcion,
+      periodo_inicio: plan.periodo_inicio,
+      periodo_fin: plan.periodo_fin,
+      responsable: plan.responsable ? String(plan.responsable) : "",
+      estado: plan.estado,
+      activo: plan.activo,
+    });
+    setMensaje(`Editando plan ${plan.nombre}.`);
+  }
+
+  function cancelarEdicionPlan() {
+    setPlanEditandoId(null);
+    setPlanForm({
+      nombre: "",
+      descripcion: "",
+      periodo_inicio: "",
+      periodo_fin: "",
+      responsable: "",
+      estado: "BORRADOR",
+      activo: true,
+    });
+    setMensaje("");
+  }
+
+  async function enviarPlanARevision(id: number) {
+    try {
+      const planActualizado = await planesApi.enviarARevision(id);
+      await cargarDatos(false);
+      setMensaje(`El plan ${planActualizado.nombre} fue enviado a revisión.`);
+    } catch (error) {
+      setMensaje(
+        error instanceof Error
+          ? error.message
+          : "No se pudo enviar el plan a revisión.",
+      );
+    }
+  }
+
+  async function archivarPlan(id: number) {
+    const confirmar = window.confirm("¿Desea archivar este plan?");
+
+    if (!confirmar) {
+      return;
+    }
+
+    try {
+      const planActualizado = await planesApi.archivar(id);
+      await cargarDatos(false);
+      setMensaje(`El plan ${planActualizado.nombre} fue archivado.`);
+    } catch (error) {
+      setMensaje(
+        error instanceof Error ? error.message : "No se pudo archivar el plan.",
+      );
+    }
+  }
+
+  async function eliminarPlan(id: number) {
+    const confirmar = window.confirm("¿Desea eliminar este plan?");
+
+    if (!confirmar) {
+      return;
+    }
+
+    try {
+      await planesApi.eliminar(id);
+      await cargarDatos(false);
+      setMensaje("Plan eliminado correctamente.");
+    } catch (error) {
+      setMensaje(
+        error instanceof Error ? error.message : "No se pudo eliminar el plan.",
+      );
+    }
+  }
+
   return (
     <main className="app">
       <section className="hero">
@@ -613,6 +769,127 @@ function App() {
       </section>
 
       <section className="card">
+        <h2>{planEditandoId ? "Editar plan" : "Registrar plan"}</h2>
+
+        <form onSubmit={crearPlan}>
+          <label>
+            Nombre
+            <input
+              value={planForm.nombre}
+              onChange={(event) =>
+                setPlanForm({ ...planForm, nombre: event.target.value })
+              }
+              placeholder="Ej. Plan Operativo Institucional 2026"
+            />
+          </label>
+
+          <label>
+            Descripción
+            <textarea
+              value={planForm.descripcion}
+              onChange={(event) =>
+                setPlanForm({ ...planForm, descripcion: event.target.value })
+              }
+              placeholder="Descripción general del plan"
+            />
+          </label>
+
+          <label>
+            Fecha de inicio
+            <input
+              type="date"
+              value={planForm.periodo_inicio}
+              onChange={(event) =>
+                setPlanForm({
+                  ...planForm,
+                  periodo_inicio: event.target.value,
+                })
+              }
+            />
+          </label>
+
+          <label>
+            Fecha de finalización
+            <input
+              type="date"
+              value={planForm.periodo_fin}
+              onChange={(event) =>
+                setPlanForm({
+                  ...planForm,
+                  periodo_fin: event.target.value,
+                })
+              }
+            />
+          </label>
+
+          <label>
+            Responsable
+            <select
+              value={planForm.responsable}
+              onChange={(event) =>
+                setPlanForm({ ...planForm, responsable: event.target.value })
+              }
+            >
+              <option value="">Sin responsable</option>
+              {usuarios
+                .filter((usuario) => usuario.is_active)
+                .map((usuario) => (
+                  <option key={usuario.id} value={usuario.id}>
+                    {usuario.first_name || usuario.last_name
+                      ? `${usuario.first_name} ${usuario.last_name}`.trim()
+                      : usuario.username}
+                  </option>
+                ))}
+            </select>
+          </label>
+
+          <label>
+            Estado
+            <select
+              value={planForm.estado}
+              onChange={(event) =>
+                setPlanForm({
+                  ...planForm,
+                  estado: event.target.value as Plan["estado"],
+                })
+              }
+            >
+              <option value="BORRADOR">Borrador</option>
+              <option value="EN_REVISION">En revisión</option>
+              <option value="APROBADO">Aprobado</option>
+              <option value="RECHAZADO">Rechazado</option>
+              <option value="ARCHIVADO">Archivado</option>
+            </select>
+          </label>
+
+          <label className="checkbox">
+            <input
+              type="checkbox"
+              checked={planForm.activo}
+              onChange={(event) =>
+                setPlanForm({ ...planForm, activo: event.target.checked })
+              }
+            />
+            Plan activo
+          </label>
+
+          <button type="submit">
+            {planEditandoId ? "Actualizar plan" : "Guardar plan"}
+          </button>
+
+          {planEditandoId && (
+            <button
+              type="button"
+              className="secondary"
+              onClick={cancelarEdicionPlan}
+            >
+              Cancelar edición
+            </button>
+          )}
+        </form>
+      </section>
+
+      <section className="card">
         <h2>Roles registrados</h2>
 
         <div className="toolbar">
@@ -719,6 +996,108 @@ function App() {
       </section>
 
       <section className="card">
+        <h2>Planes registrados</h2>
+
+        <div className="toolbar">
+          <input
+            value={busquedaPlanes}
+            onChange={(event) => setBusquedaPlanes(event.target.value)}
+            placeholder="Buscar plan por nombre, estado o responsable..."
+          />
+        </div>
+
+        <div className="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Nombre</th>
+                <th>Periodo</th>
+                <th>Responsable</th>
+                <th>Estado</th>
+                <th>Activo</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {planesFiltrados.map((plan) => (
+                <tr key={plan.id}>
+                  <td>{plan.id}</td>
+                  <td>
+                    <strong>{plan.nombre}</strong>
+                    <br />
+                    <span>{plan.descripcion || "Sin descripción"}</span>
+                  </td>
+                  <td>
+                    {plan.periodo_inicio} / {plan.periodo_fin}
+                  </td>
+                  <td>
+                    {plan.responsable_detalle?.nombre_completo ||
+                      "Sin responsable"}
+                  </td>
+                  <td>{plan.estado}</td>
+                  <td>{plan.activo ? "Sí" : "No"}</td>
+                  <td className="actions">
+                    <button
+                      type="button"
+                      onClick={() => cargarPlanParaEditar(plan)}
+                    >
+                      Editar
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={
+                        plan.estado !== "BORRADOR" &&
+                        plan.estado !== "RECHAZADO"
+                      }
+                      onClick={() => enviarPlanARevision(plan.id)}
+                    >
+                      Enviar a revisión
+                    </button>
+
+                    <button
+                      type="button"
+                      className="secondary"
+                      disabled={plan.estado === "ARCHIVADO"}
+                      onClick={() => archivarPlan(plan.id)}
+                    >
+                      Archivar
+                    </button>
+
+                    <button
+                      type="button"
+                      className="danger"
+                      disabled={
+                        plan.estado === "EN_REVISION" ||
+                        plan.estado === "APROBADO"
+                      }
+                      title={
+                        plan.estado === "EN_REVISION" ||
+                        plan.estado === "APROBADO"
+                          ? "No se puede eliminar un plan en revisión o aprobado."
+                          : "Eliminar plan"
+                      }
+                      onClick={() => eliminarPlan(plan.id)}
+                    >
+                      Eliminar
+                    </button>
+                  </td>
+                </tr>
+              ))}
+
+              {planesFiltrados.length === 0 && (
+                <tr>
+                  <td colSpan={7}>No existen planes registrados.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="card">
         <h2>Usuarios registrados</h2>
 
         <div className="toolbar">
@@ -740,6 +1119,7 @@ function App() {
                 <th>Rol</th>
                 <th>Estado</th>
                 <th>Activo</th>
+                <th>Planes</th>
                 <th>Acciones</th>
               </tr>
             </thead>
@@ -756,6 +1136,7 @@ function App() {
                   <td>{usuario.rol_detalle?.nombre || "Sin rol"}</td>
                   <td>{usuario.estado}</td>
                   <td>{usuario.is_active ? "Sí" : "No"}</td>
+                  <td>{contarPlanesAsignadosUsuario(usuario.id)}</td>
                   <td className="actions">
                     <button
                       type="button"
@@ -778,6 +1159,12 @@ function App() {
                     <button
                       type="button"
                       className="danger"
+                      disabled={contarPlanesAsignadosUsuario(usuario.id) > 0}
+                      title={
+                        contarPlanesAsignadosUsuario(usuario.id) > 0
+                          ? "No se puede eliminar un usuario asignado como responsable de planes."
+                          : "Eliminar usuario"
+                      }
                       onClick={() => eliminarUsuario(usuario.id)}
                     >
                       Eliminar
@@ -788,7 +1175,7 @@ function App() {
 
               {usuariosFiltrados.length === 0 && (
                 <tr>
-                  <td colSpan={8}>No existen usuarios registrados.</td>
+                  <td colSpan={9}>No existen usuarios registrados.</td>
                 </tr>
               )}
             </tbody>

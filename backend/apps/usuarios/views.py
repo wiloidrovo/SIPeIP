@@ -1,7 +1,7 @@
 from rest_framework import filters, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
-
+from django.db.models.deletion import ProtectedError
 from .models import Usuario
 from .serializers import UsuarioSerializer
 
@@ -36,6 +36,45 @@ class UsuarioViewSet(viewsets.ModelViewSet):
     ordering = [
         "username",
     ]
+
+    def destroy(self, request, *args, **kwargs):
+        """
+        Evita eliminar usuarios que todavía están vinculados a planes.
+
+        La relación Plan.responsable usa PROTECT para preservar la trazabilidad
+        institucional. Si un usuario tiene planes asignados, debe bloquearse o
+        reasignarse antes de permitir su eliminación física.
+        """
+
+        usuario = self.get_object()
+        planes_count = usuario.planes_responsables.count()
+
+        if planes_count > 0:
+            return Response(
+                {
+                    "detail": (
+                        f"No se puede eliminar el usuario '{usuario.username}' "
+                        f"porque está asignado como responsable de {planes_count} "
+                        "plan(es). Reasigne esos planes o bloquee el usuario "
+                        "antes de eliminarlo."
+                    )
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        try:
+            return super().destroy(request, *args, **kwargs)
+        except ProtectedError:
+            return Response(
+                {
+                    "detail": (
+                        "No se puede eliminar este usuario porque está vinculado "
+                        "a otros registros del sistema. Reasigne o archive esos "
+                        "registros antes de eliminarlo."
+                    )
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
 
     @action(detail=True, methods=["post"])
     def activar(self, request, pk=None):

@@ -120,3 +120,48 @@ export function validateUsuarioForm(data: {
 
   return ok();
 }
+
+export function validatePlanForm(form: {
+  nombre: string;
+  descripcion: string;
+  periodo_inicio: string;
+  periodo_fin: string;
+  responsable: string;
+}) {
+  const nombre = form.nombre.trim();
+  const descripcion = form.descripcion.trim();
+
+  if (!nombre) {
+    return fail("El nombre del plan es obligatorio.");
+  }
+
+  if (nombre.length < 3) {
+    return fail("El nombre del plan debe tener al menos 3 caracteres.");
+  }
+
+  if (nombre.length > 150) {
+    return fail("El nombre del plan no puede superar los 150 caracteres.");
+  }
+
+  if (descripcion.length > 1000) {
+    return fail(
+      "La descripción del plan no puede superar los 1000 caracteres.",
+    );
+  }
+
+  if (!form.periodo_inicio) {
+    return fail("La fecha de inicio del plan es obligatoria.");
+  }
+
+  if (!form.periodo_fin) {
+    return fail("La fecha de finalización del plan es obligatoria.");
+  }
+
+  if (form.periodo_fin < form.periodo_inicio) {
+    return fail(
+      "La fecha de finalización no puede ser anterior a la fecha de inicio.",
+    );
+  }
+
+  return ok();
+}
