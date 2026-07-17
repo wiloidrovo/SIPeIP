@@ -1,7 +1,16 @@
 from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
+from rest_framework.exceptions import PermissionDenied
+
+from apps.configuracion.models import EntidadInstitucional, UnidadOrganizacional
+from apps.configuracion.scope import (
+    obtener_alcance_usuario,
+    usuario_puede_acceder_entidad,
+)
 from apps.roles.models import Rol
-from apps.roles.serializers import RolSerializer
+from apps.roles.permissions import alcance_es_delegable, es_rol_tecnico_protegido
+from apps.roles.serializers import RolResumenSerializer
+
 from .models import Usuario
 import re
 
@@ -11,7 +20,9 @@ class UsuarioSerializer(serializers.ModelSerializer):
     Serializador principal para la gestión de Usuarios.
     Maneja la creación y actualización segura de contraseñas y la sincronización de estados.
     """
-    rol_detalle = RolSerializer(source="rol", read_only=True)
+    rol_detalle = RolResumenSerializer(source="rol", read_only=True)
+    entidad_detalle = serializers.SerializerMethodField()
+    unidad_organizacional_detalle = serializers.SerializerMethodField()
     email = serializers.EmailField(
         required=True,
         allow_blank=False,
@@ -59,6 +70,10 @@ class UsuarioSerializer(serializers.ModelSerializer):
             "rol_detalle",
             "estado",
             "telefono",
+            "entidad",
+            "entidad_detalle",
+            "unidad_organizacional",
+            "unidad_organizacional_detalle",
             "is_active",
             "is_staff",
             "date_joined",
@@ -68,7 +83,50 @@ class UsuarioSerializer(serializers.ModelSerializer):
             "id",
             "date_joined",
             "rol_detalle",
+            "entidad_detalle",
+            "unidad_organizacional_detalle",
+            "estado",
+            "is_active",
+            "is_staff",
         ]
+
+    def get_entidad_detalle(self, obj):
+        if not obj.entidad_id:
+            return None
+        return {
+            "id": obj.entidad_id,
+            "codigo_oficial": obj.entidad.codigo_oficial,
+            "nombre": obj.entidad.nombre,
+        }
+
+    def get_unidad_organizacional_detalle(self, obj):
+        if not obj.unidad_organizacional_id:
+            return None
+        return {
+            "id": obj.unidad_organizacional_id,
+            "codigo": obj.unidad_organizacional.codigo,
+            "nombre": obj.unidad_organizacional.nombre,
+        }
+
+    def validate_entidad(self, value):
+        request = self.context.get("request")
+        actor = getattr(request, "user", None)
+        if value and not usuario_puede_acceder_entidad(actor, value.pk):
+            raise PermissionDenied(
+                "No puede asignar usuarios a otra entidad institucional."
+            )
+        if value and value.estado != EntidadInstitucional.Estado.ACTIVA:
+            raise serializers.ValidationError(
+                "No se puede asignar una entidad institucional inactiva."
+            )
+        return value
+
+    def validate_unidad_organizacional(self, value):
+        if value and value.estado != UnidadOrganizacional.Estado.ACTIVA:
+            raise serializers.ValidationError(
+                "No se puede asignar una unidad organizacional inactiva."
+            )
+        return value
 
     def validate_username(self, value):
         """Valida que el nombre de usuario no esté vacío y sea único."""
@@ -126,11 +184,79 @@ class UsuarioSerializer(serializers.ModelSerializer):
         if value and not value.activo:
             raise serializers.ValidationError("No se puede asignar un rol inactivo.")
 
+        request = self.context.get("request")
+        actor = getattr(request, "user", None)
+        if value and es_rol_tecnico_protegido(value) and not getattr(
+            actor, "is_superuser", False
+        ):
+            raise PermissionDenied(
+                "Solo un superusuario puede asignar un rol técnico de acceso total."
+            )
+
+        if value and not getattr(actor, "is_superuser", False):
+            obtener_permisos = getattr(actor, "get_sipeip_permissions", None)
+            permisos_actor = set(obtener_permisos()) if obtener_permisos else set()
+            permisos_destino = set(value.permisos)
+            if not permisos_destino.issubset(permisos_actor):
+                raise PermissionDenied(
+                    "No puede asignar un rol con permisos superiores a los propios."
+                )
+
+            alcance_actor = obtener_alcance_usuario(actor)
+            if not alcance_es_delegable(alcance_actor, value.alcance):
+                raise PermissionDenied(
+                    "No puede asignar un rol con un alcance superior o distinto al propio."
+                )
+
+        if (
+            self.instance
+            and getattr(actor, "pk", None) == self.instance.pk
+            and self.instance.rol_id != value.pk
+            and not actor.is_superuser
+        ):
+            raise PermissionDenied("No puede cambiar su propio rol.")
+
         return value
 
     def validate(self, attrs):
         request = self.context.get("request")
         password = attrs.get("password")
+        entidad = attrs.get("entidad", getattr(self.instance, "entidad", None))
+        unidad = attrs.get(
+            "unidad_organizacional",
+            getattr(self.instance, "unidad_organizacional", None),
+        )
+        rol = attrs.get("rol", getattr(self.instance, "rol", None))
+
+        if (
+            rol
+            and rol.alcance not in {Rol.Alcance.TOTAL, Rol.Alcance.GLOBAL}
+            and entidad is None
+        ):
+            raise serializers.ValidationError(
+                {"entidad": "Este rol requiere una entidad institucional asignada."}
+            )
+
+        if unidad and (entidad is None or unidad.entidad_id != entidad.pk):
+            raise serializers.ValidationError(
+                {
+                    "unidad_organizacional": (
+                        "La unidad organizacional debe pertenecer a la entidad asignada."
+                    )
+                }
+            )
+
+        if self.instance and (
+            self.instance.is_staff
+            or self.instance.is_superuser
+            or es_rol_tecnico_protegido(self.instance.rol)
+        ):
+            actor = getattr(request, "user", None)
+
+            if not getattr(actor, "is_superuser", False):
+                raise PermissionDenied(
+                    "Solo un superusuario puede modificar una cuenta administrativa."
+                )
 
         if request and request.method == "POST" and not password:
             raise serializers.ValidationError(
@@ -138,7 +264,19 @@ class UsuarioSerializer(serializers.ModelSerializer):
             )
 
         if password:
-            validate_password(password)
+            candidato = Usuario(
+                username=attrs.get(
+                    "username", getattr(self.instance, "username", "")
+                ),
+                email=attrs.get("email", getattr(self.instance, "email", "")),
+                first_name=attrs.get(
+                    "first_name", getattr(self.instance, "first_name", "")
+                ),
+                last_name=attrs.get(
+                    "last_name", getattr(self.instance, "last_name", "")
+                ),
+            )
+            validate_password(password, user=candidato)
 
         return attrs
 

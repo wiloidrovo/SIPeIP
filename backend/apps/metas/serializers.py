@@ -1,9 +1,30 @@
 from rest_framework import serializers
+from rest_framework.exceptions import PermissionDenied
+from django.utils import timezone
 
+from apps.configuracion.scope import (
+    obtener_alcance_usuario,
+    usuario_puede_acceder_entidad,
+)
 from apps.planes.models import Plan
-from apps.usuarios.models import Usuario
 
 from .models import AvanceIndicador, Indicador, Meta
+
+
+def _validar_alcance_plan(serializer, plan):
+    request = serializer.context.get("request")
+    usuario = getattr(request, "user", None)
+    if not usuario_puede_acceder_entidad(usuario, plan.entidad_id):
+        raise PermissionDenied(
+            "No puede relacionar registros con un plan de otra entidad."
+        )
+    if obtener_alcance_usuario(usuario) in {"ENTIDAD", "PROPIO_ASIGNADO"} and (
+        plan.creado_por_id != getattr(usuario, "pk", None)
+        and plan.responsable_id != getattr(usuario, "pk", None)
+    ):
+        raise PermissionDenied(
+            "Solo puede relacionar registros con planes propios o asignados."
+        )
 
 
 class MetaSerializer(serializers.ModelSerializer):
@@ -38,6 +59,8 @@ class MetaSerializer(serializers.ModelSerializer):
         read_only_fields = [
             "id",
             "plan_detalle",
+            "estado",
+            "activa",
             "indicadores_count",
             "fecha_creacion",
             "fecha_actualizacion",
@@ -89,7 +112,25 @@ class MetaSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 "No se puede registrar una meta en un plan inactivo o archivado."
             )
+        if value.estado not in {
+            Plan.EstadoPlan.BORRADOR,
+            Plan.EstadoPlan.DEVUELTO,
+            Plan.EstadoPlan.RECHAZADO,
+        }:
+            raise serializers.ValidationError(
+                "Solo se pueden gestionar metas en un plan editable."
+            )
 
+        if (
+            self.instance
+            and value.pk != self.instance.plan_id
+            and self.instance.indicadores.exists()
+        ):
+            raise serializers.ValidationError(
+                "No se puede cambiar el plan de una meta con indicadores."
+            )
+
+        _validar_alcance_plan(self, value)
         return value
 
     def validate(self, attrs):
@@ -137,6 +178,9 @@ class IndicadorSerializer(serializers.ModelSerializer):
             "valor_actual",
             "frecuencia",
             "activo",
+            "validado",
+            "validado_por",
+            "fecha_validacion",
             "avances_count",
             "fecha_creacion",
             "fecha_actualizacion",
@@ -145,6 +189,10 @@ class IndicadorSerializer(serializers.ModelSerializer):
             "id",
             "meta_detalle",
             "valor_actual",
+            "activo",
+            "validado",
+            "validado_por",
+            "fecha_validacion",
             "avances_count",
             "fecha_creacion",
             "fecha_actualizacion",
@@ -199,11 +247,28 @@ class IndicadorSerializer(serializers.ModelSerializer):
     def validate_meta(self, value):
         """Evita crear indicadores sobre metas archivadas o inactivas."""
 
-        if not value.activa or value.estado == Meta.EstadoMeta.ARCHIVADA:
+        if not value.activa or value.estado != Meta.EstadoMeta.ACTIVA:
             raise serializers.ValidationError(
-                "No se puede registrar un indicador en una meta inactiva o archivada."
+                "No se puede registrar un indicador en una meta que no esté activa."
+            )
+        if value.plan.estado not in {
+            Plan.EstadoPlan.BORRADOR,
+            Plan.EstadoPlan.DEVUELTO,
+            Plan.EstadoPlan.RECHAZADO,
+        }:
+            raise serializers.ValidationError(
+                "No se puede cambiar un indicador dentro de un plan no editable."
+            )
+        if (
+            self.instance
+            and value.pk != self.instance.meta_id
+            and self.instance.avances.exists()
+        ):
+            raise serializers.ValidationError(
+                "No se puede cambiar la meta de un indicador con avances."
             )
 
+        _validar_alcance_plan(self, value.plan)
         return value
 
     def validate_valor_base(self, value):
@@ -233,11 +298,7 @@ class AvanceIndicadorSerializer(serializers.ModelSerializer):
 
     indicador = serializers.PrimaryKeyRelatedField(queryset=Indicador.objects.all())
     indicador_detalle = serializers.SerializerMethodField()
-    registrado_por = serializers.PrimaryKeyRelatedField(
-        queryset=Usuario.objects.all(),
-        required=False,
-        allow_null=True,
-    )
+    registrado_por = serializers.PrimaryKeyRelatedField(read_only=True)
     registrado_por_detalle = serializers.SerializerMethodField()
 
     class Meta:
@@ -256,6 +317,7 @@ class AvanceIndicadorSerializer(serializers.ModelSerializer):
         read_only_fields = [
             "id",
             "indicador_detalle",
+            "registrado_por",
             "registrado_por_detalle",
             "fecha_creacion",
         ]
@@ -294,12 +356,20 @@ class AvanceIndicadorSerializer(serializers.ModelSerializer):
                 "No se puede registrar avance sobre un indicador inactivo."
             )
 
+        _validar_alcance_plan(self, value.meta.plan)
         return value
 
     def validate_observacion(self, value):
         """Normaliza la observación del avance."""
 
         return value.strip() if value else ""
+
+    def validate_fecha_registro(self, value):
+        if value > timezone.localdate():
+            raise serializers.ValidationError(
+                "La fecha del avance no puede estar en el futuro."
+            )
+        return value
 
     def validate_valor(self, value):
         """Valida que el valor registrado no sea negativo."""

@@ -10,8 +10,11 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
-from pathlib import Path
 import os
+from pathlib import Path
+
+from django.core.exceptions import ImproperlyConfigured
+from django.core.management.utils import get_random_secret_key
 from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -23,20 +26,33 @@ load_dotenv(BASE_DIR / ".env")
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-#SECRET_KEY = 'django-insecure-jc-*&n9w1_w497cth+gyu=f$!7^_e#+#4%@mwmxbkpm6&58#9x'
-SECRET_KEY = os.getenv("SECRET_KEY", "django-insecure-dev-key")
-
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv("DEBUG", "False") == "True"
 
-ALLOWED_HOSTS = []
+# Nunca se usa una clave conocida como respaldo en producción. En desarrollo
+# sin .env se genera una clave efímera, por lo que las sesiones expiran al
+# reiniciar el proceso.
+SECRET_KEY = os.getenv("SECRET_KEY")
+SECRET_KEY_EPHEMERAL = False
+if not SECRET_KEY:
+    if not DEBUG:
+        raise ImproperlyConfigured("Debe configurar SECRET_KEY en el entorno.")
+    SECRET_KEY = get_random_secret_key()
+    SECRET_KEY_EPHEMERAL = True
+
+ALLOWED_HOSTS = [
+    host.strip()
+    for host in os.getenv(
+        "ALLOWED_HOSTS", "localhost,testserver" if DEBUG else ""
+    ).split(",")
+    if host.strip()
+]
 
 
 # Application definition
 
 INSTALLED_APPS = [
-    'django.contrib.admin',
+    'config.admin.SipeipAdminConfig',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
@@ -46,10 +62,17 @@ INSTALLED_APPS = [
     'rest_framework',
     'corsheaders',
 
+    'apps.autenticacion',
     'apps.roles',
+    'apps.configuracion',
     'apps.usuarios',
     'apps.planes',
     'apps.metas',
+    'apps.auditoria',
+    'apps.objetivos',
+    'apps.proyectos',
+    'apps.dashboard',
+    'apps.reportes',
 ]
 
 MIDDLEWARE = [
@@ -59,6 +82,7 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'apps.auditoria.middleware.AuditoriaFallosMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
@@ -146,3 +170,46 @@ AUTH_USER_MODEL = "usuarios.Usuario"
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
 ]
+
+# La SPA usa una sesión de servidor: el identificador viaja únicamente en una
+# cookie HttpOnly y las operaciones de escritura mantienen la protección CSRF.
+CORS_ALLOW_CREDENTIALS = True
+CSRF_TRUSTED_ORIGINS = [
+    "http://localhost:5173",
+]
+SIPEIP_FRONTEND_LOGIN_URL = os.getenv(
+    "SIPEIP_FRONTEND_LOGIN_URL",
+    "http://localhost:5173/login",
+)
+
+AUTH_SESSION_AGE_SECONDS = int(os.getenv("AUTH_SESSION_AGE_SECONDS", "900"))
+SESSION_COOKIE_AGE = AUTH_SESSION_AGE_SECONDS
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = "Lax"
+SESSION_COOKIE_SECURE = os.getenv(
+    "SESSION_COOKIE_SECURE",
+    "False" if DEBUG else "True",
+).lower() in {"1", "true", "yes"}
+SESSION_EXPIRE_AT_BROWSER_CLOSE = True
+SESSION_SAVE_EVERY_REQUEST = False
+
+CSRF_COOKIE_HTTPONLY = False
+CSRF_COOKIE_SAMESITE = "Lax"
+CSRF_COOKIE_SECURE = SESSION_COOKIE_SECURE
+CSRF_FAILURE_VIEW = "config.api_exceptions.csrf_failure"
+
+REST_FRAMEWORK = {
+    "DEFAULT_RENDERER_CLASSES": [
+        "rest_framework.renderers.JSONRenderer",
+    ],
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "apps.autenticacion.authentication.SipeipSessionAuthentication",
+    ],
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.IsAuthenticated",
+    ],
+    "EXCEPTION_HANDLER": "config.api_exceptions.sipeip_exception_handler",
+    "DEFAULT_THROTTLE_RATES": {
+        "auth_login": os.getenv("AUTH_LOGIN_RATE", "10/min"),
+    },
+}

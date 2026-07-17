@@ -31,7 +31,7 @@ class Meta(models.Model):
         choices=EstadoMeta.choices,
         default=EstadoMeta.BORRADOR,
     )
-    activa = models.BooleanField(default=True)
+    activa = models.BooleanField(default=False)
     fecha_creacion = models.DateTimeField(auto_now_add=True)
     fecha_actualizacion = models.DateTimeField(auto_now=True)
 
@@ -43,7 +43,17 @@ class Meta(models.Model):
             models.UniqueConstraint(
                 fields=["plan", "nombre"],
                 name="unique_meta_por_plan",
-            )
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(estado="ACTIVA", activa=True)
+                    | models.Q(
+                        estado__in=["BORRADOR", "CERRADA", "ARCHIVADA"],
+                        activa=False,
+                    )
+                ),
+                name="meta_estado_activa_coherente",
+            ),
         ]
 
     def __str__(self):
@@ -81,6 +91,15 @@ class Indicador(models.Model):
         default=FrecuenciaMedicion.TRIMESTRAL,
     )
     activo = models.BooleanField(default=True)
+    validado = models.BooleanField(default=False)
+    validado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="indicadores_validados",
+        null=True,
+        blank=True,
+    )
+    fecha_validacion = models.DateTimeField(null=True, blank=True)
     fecha_creacion = models.DateTimeField(auto_now_add=True)
     fecha_actualizacion = models.DateTimeField(auto_now=True)
 

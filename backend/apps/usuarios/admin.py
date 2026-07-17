@@ -14,6 +14,8 @@ class UsuarioAdmin(UserAdmin):
         "first_name",
         "last_name",
         "rol",
+        "entidad",
+        "unidad_organizacional",
         "estado",
         "is_active",
         "is_staff",
@@ -22,6 +24,7 @@ class UsuarioAdmin(UserAdmin):
     list_filter = (
         "estado",
         "rol",
+        "entidad",
         "is_active",
         "is_staff",
         "is_superuser",
@@ -44,6 +47,8 @@ class UsuarioAdmin(UserAdmin):
                     "rol",
                     "estado",
                     "telefono",
+                    "entidad",
+                    "unidad_organizacional",
                 )
             },
         ),

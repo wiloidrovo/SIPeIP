@@ -1,0 +1,23 @@
+.menu-lines,
+.menu-lines::before,
+.menu-lines::after {
+  display: block;
+  width: 18px;
+  height: 2px;
+  border-radius: 2px;
+  background: currentColor;
+}
+
+.menu-lines {
+  position: relative;
+}
+
+.menu-lines::before,
+.menu-lines::after {
+  content: "";
+  position: absolute;
+  left: 0;
+}
+
+.menu-lines::before { top: -6px; }
+.menu-lines::after { top: 6px; }
