@@ -7,9 +7,30 @@ from .models import AvanceIndicador, Indicador, Meta
 class MetaAdmin(admin.ModelAdmin):
     """Configuración administrativa para metas institucionales."""
 
-    list_display = ("nombre", "plan", "estado", "fecha_inicio", "fecha_fin", "activa")
-    list_filter = ("estado", "activa", "fecha_inicio", "fecha_fin")
-    search_fields = ("nombre", "descripcion", "plan__nombre")
+    list_display = (
+        "nombre",
+        "plan",
+        "objetivo_estrategico",
+        "estado",
+        "fecha_inicio",
+        "fecha_fin",
+        "activa",
+    )
+    list_filter = (
+        "estado",
+        "activa",
+        "plan__entidad",
+        "fecha_inicio",
+        "fecha_fin",
+    )
+    search_fields = (
+        "nombre",
+        "descripcion",
+        "plan__nombre",
+        "objetivo_estrategico__codigo",
+        "objetivo_estrategico__nombre",
+    )
+    autocomplete_fields = ("plan", "objetivo_estrategico")
     ordering = ("-fecha_creacion",)
 
 

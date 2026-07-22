@@ -168,6 +168,7 @@ export function validatePlanForm(form: {
 
 export function validateMetaForm(form: {
   plan: string;
+  objetivo_estrategico: string;
   nombre: string;
   descripcion: string;
   resultado_esperado: string;
@@ -180,6 +181,10 @@ export function validateMetaForm(form: {
 
   if (!form.plan) {
     return fail("Debe seleccionar un plan para la meta.");
+  }
+
+  if (!form.objetivo_estrategico) {
+    return fail("Debe seleccionar el objetivo estratégico de la meta.");
   }
 
   if (!nombre) {

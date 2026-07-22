@@ -1,5 +1,5 @@
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.db.models.deletion import ProtectedError
 from django.utils import timezone
 from rest_framework import filters, serializers, status, viewsets
@@ -17,6 +17,7 @@ from apps.configuracion.scope import (
     filtrar_queryset_por_entidad,
     obtener_alcance_usuario,
 )
+from apps.objetivos.models import EstadoCatalogo
 from apps.planes.models import Plan
 from apps.roles.permissions import HasSipeipPermission
 
@@ -43,7 +44,16 @@ class MetaViewSet(AuditoriaModelViewSetMixin, viewsets.ModelViewSet):
     API REST para gestionar metas institucionales asociadas a planes.
     """
 
-    queryset = Meta.objects.select_related("plan").all()
+    queryset = (
+        Meta.objects.select_related(
+            "plan",
+            "plan__entidad",
+            "objetivo_estrategico",
+            "objetivo_estrategico__entidad",
+        )
+        .annotate(indicadores_count_anotado=Count("indicadores"))
+        .all()
+    )
     serializer_class = MetaSerializer
     permission_classes = [IsAuthenticated, HasSipeipPermission]
     permission_map = {
@@ -64,6 +74,8 @@ class MetaViewSet(AuditoriaModelViewSetMixin, viewsets.ModelViewSet):
         "resultado_esperado",
         "estado",
         "plan__nombre",
+        "objetivo_estrategico__codigo",
+        "objetivo_estrategico__nombre",
     ]
     ordering_fields = ["id", "nombre", "estado", "fecha_inicio", "fecha_fin"]
     ordering = ["-fecha_creacion"]
@@ -74,7 +86,19 @@ class MetaViewSet(AuditoriaModelViewSetMixin, viewsets.ModelViewSet):
         queryset = filtrar_queryset_por_entidad(
             super().get_queryset(), self.request.user, "plan__entidad"
         )
-        return _filtrar_propios(queryset, self.request.user, "plan").distinct()
+        queryset = _filtrar_propios(queryset, self.request.user, "plan")
+        filtros_numericos = {
+            "plan": "plan_id",
+            "objetivo_estrategico": "objetivo_estrategico_id",
+        }
+        for parametro, lookup in filtros_numericos.items():
+            valor = self.request.query_params.get(parametro)
+            if valor and valor.isdigit():
+                queryset = queryset.filter(**{lookup: int(valor)})
+        estado = self.request.query_params.get("estado")
+        if estado in Meta.EstadoMeta.values:
+            queryset = queryset.filter(estado=estado)
+        return queryset.distinct()
 
     @staticmethod
     def _validar_plan_editable(plan):
@@ -246,6 +270,17 @@ class MetaViewSet(AuditoriaModelViewSetMixin, viewsets.ModelViewSet):
         }:
             return Response(
                 {"detail": "Solo se puede activar una meta de un plan editable."},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        if meta.objetivo_estrategico.estado != EstadoCatalogo.ACTIVO:
+            return Response(
+                {
+                    "detail": (
+                        "No se puede activar una meta cuyo objetivo estratégico "
+                        "se encuentra inactivo."
+                    )
+                },
                 status=status.HTTP_409_CONFLICT,
             )
 

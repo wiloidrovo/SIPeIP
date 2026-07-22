@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.db import models
 
 
@@ -18,6 +19,11 @@ class Meta(models.Model):
 
     plan = models.ForeignKey(
         "planes.Plan",
+        on_delete=models.PROTECT,
+        related_name="metas",
+    )
+    objetivo_estrategico = models.ForeignKey(
+        "objetivos.ObjetivoEstrategico",
         on_delete=models.PROTECT,
         related_name="metas",
     )
@@ -58,6 +64,45 @@ class Meta(models.Model):
 
     def __str__(self):
         return self.nombre
+
+    def clean(self):
+        """Mantiene coherente la meta con su plan y objetivo institucional."""
+
+        super().clean()
+        errores = {}
+
+        if self.plan_id and self.objetivo_estrategico_id:
+            if self.plan.entidad_id != self.objetivo_estrategico.entidad_id:
+                errores["objetivo_estrategico"] = (
+                    "El objetivo estratégico debe pertenecer a la entidad del plan."
+                )
+            objetivo_existente_id = None
+            if self.pk:
+                objetivo_existente_id = (
+                    type(self).objects.filter(pk=self.pk).values_list(
+                        "objetivo_estrategico_id",
+                        flat=True,
+                    ).first()
+                )
+            conserva_objetivo_existente = (
+                objetivo_existente_id == self.objetivo_estrategico_id
+            )
+            if (
+                self.objetivo_estrategico.estado != "ACTIVO"
+                and not conserva_objetivo_existente
+            ):
+                errores["objetivo_estrategico"] = (
+                    "Solo puede utilizar un objetivo estratégico activo."
+                )
+
+        if self.fecha_inicio and self.fecha_fin:
+            if self.fecha_fin < self.fecha_inicio:
+                errores["fecha_fin"] = (
+                    "La fecha de finalización no puede ser anterior a la fecha de inicio."
+                )
+
+        if errores:
+            raise ValidationError(errores)
 
 
 class Indicador(models.Model):

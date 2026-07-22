@@ -13,8 +13,8 @@ El alcance implementado incluye:
 - alcance institucional aplicado en los querysets del backend;
 - panel y navegación condicionados por permisos efectivos;
 - gestión de usuarios, roles, entidades y unidades organizacionales;
-- planes, metas, indicadores y avances;
-- objetivos estratégicos y alineación PND/ODS;
+- planes, metas vinculadas a objetivos estratégicos, indicadores y avances;
+- objetivos estratégicos y alineación PND/ODS con trazabilidad desde las metas;
 - proyectos de inversión, hitos y seguimiento físico-financiero;
 - auditoría de accesos y operaciones;
 - reportes con vista previa y exportación a JSON, CSV, XLSX y PDF;
@@ -59,6 +59,25 @@ PostgreSQL
 
 El backend es la autoridad para validaciones, permisos, alcance y transiciones de estado. Ocultar un botón en el frontend mejora la experiencia, pero no sustituye la autorización de la API.
 
+### Cadena de planificación y seguimiento
+
+```text
+Entidad institucional
+├── Plan
+│   └── Meta
+│       ├── Objetivo estratégico principal
+│       └── Indicador
+│           └── Avances
+└── Objetivo estratégico
+    └── Alineación
+        ├── Objetivo PND
+        └── ODS
+```
+
+Cada meta contribuye a un único objetivo estratégico principal. Un objetivo puede agrupar varias metas y conectarlas con el PND y los ODS mediante la matriz de alineación. Esta estructura evita duplicar metas o avances y permite consultar la contribución institucional desde ambos módulos.
+
+El plan y el objetivo seleccionados para una meta deben pertenecer a la misma entidad. Los objetivos inactivos se conservan en registros históricos, pero no pueden utilizarse para crear, reasignar ni activar metas.
+
 ### Seguridad
 
 - La sesión se almacena en el servidor Django.
@@ -80,10 +99,10 @@ El backend es la autoridad para validaciones, permisos, alcance y transiciones d
 | Roles         | Catálogo de roles, permisos, alcance, activación y protección contra escalación |
 | Configuración | Entidades y unidades organizacionales jerárquicas                               |
 | Planes        | Flujo de borrador, revisión, devolución, aprobación, rechazo y archivo          |
-| Metas         | Activación, cierre, archivo y relación con planes                               |
+| Metas         | Activación, cierre, archivo y relación con planes y objetivos estratégicos       |
 | Indicadores   | Medición, activación, validación y registro de avances                          |
-| Objetivos     | Objetivos estratégicos institucionales                                          |
-| Alineación    | Catálogos PND/ODS y matriz de alineación                                        |
+| Objetivos     | Objetivos estratégicos y consulta de metas y alineaciones vinculadas              |
+| Alineación    | Catálogos PND/ODS y matriz entre objetivos institucionales, PND y ODS             |
 | Proyectos     | Proyectos de inversión, cronograma, hitos y seguimiento                         |
 | Reportes      | Vista previa y exportación con filtros autorizados                              |
 | Auditoría     | Consulta de accesos, cambios y resultados de operaciones                        |
@@ -182,6 +201,8 @@ Ejecute las migraciones:
 ```powershell
 python manage.py migrate
 ```
+
+En una instalación existente, la migración vincula automáticamente una meta cuando su entidad tiene un único objetivo estratégico activo. Si encuentra una relación ambigua, se detiene antes de imponer el campo obligatorio para evitar asignaciones incorrectas; en ese caso deben vincularse primero las metas pendientes y volver a ejecutar `python manage.py migrate`.
 
 ### 3. Inicializar roles y datos locales
 
@@ -325,6 +346,20 @@ Las acciones específicas de revisión, aprobación, archivo, validación y segu
 | Superadministrador técnico  | Acceso técnico total excepcional                       |
 
 La autorización se decide mediante códigos de permiso. Un usuario o rol inactivo no otorga permisos, y un administrador ordinario no puede delegar permisos superiores a los propios ni modificar el rol técnico protegido.
+
+## Validación manual recomendada
+
+1. Inicie sesión con cada uno de los seis usuarios locales y confirme que el menú, el panel y las acciones cambian según sus permisos.
+2. Con un perfil administrativo, revise usuarios, roles, entidades y unidades organizacionales.
+3. Cree un plan en borrador y una meta seleccionando un objetivo estratégico de la misma entidad. Compruebe que una combinación entre instituciones sea rechazada.
+4. Revise en `/objetivos` los contadores de metas y alineaciones vinculadas.
+5. En `/alineacion/pnd`, relacione el objetivo estratégico con un objetivo PND y un ODS, agregando la justificación correspondiente.
+6. Registre indicadores y avances para comprobar la cadena de seguimiento de la meta.
+7. Verifique las transiciones controladas de planes, metas, indicadores y proyectos con perfiles autorizados y no autorizados.
+8. Confirme con el Usuario Externo y el Auditor que solo aparezcan registros dentro de su alcance institucional y que el Auditor no disponga de acciones de mutación.
+9. Genere vistas previas y exportaciones desde Reportes y consulte los eventos resultantes en Auditoría.
+
+Para probar la creación de metas, el plan debe encontrarse en un estado editable: `BORRADOR`, `DEVUELTO` o `RECHAZADO`.
 
 ## Comprobaciones del proyecto
 

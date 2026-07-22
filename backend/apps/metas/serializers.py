@@ -6,6 +6,7 @@ from apps.configuracion.scope import (
     obtener_alcance_usuario,
     usuario_puede_acceder_entidad,
 )
+from apps.objetivos.models import EstadoCatalogo, ObjetivoEstrategico
 from apps.planes.models import Plan
 
 from .models import AvanceIndicador, Indicador, Meta
@@ -36,7 +37,19 @@ class MetaSerializer(serializers.ModelSerializer):
     """
 
     plan = serializers.PrimaryKeyRelatedField(queryset=Plan.objects.all())
+    objetivo_estrategico = serializers.PrimaryKeyRelatedField(
+        queryset=ObjetivoEstrategico.objects.all(),
+        required=True,
+        allow_null=False,
+        error_messages={
+            "required": "Debe seleccionar el objetivo estratégico de la meta.",
+            "null": "Debe seleccionar el objetivo estratégico de la meta.",
+            "does_not_exist": "El objetivo estratégico seleccionado no existe.",
+            "incorrect_type": "El objetivo estratégico seleccionado no es válido.",
+        },
+    )
     plan_detalle = serializers.SerializerMethodField()
+    objetivo_estrategico_detalle = serializers.SerializerMethodField()
     indicadores_count = serializers.SerializerMethodField()
 
     class Meta:
@@ -45,6 +58,8 @@ class MetaSerializer(serializers.ModelSerializer):
             "id",
             "plan",
             "plan_detalle",
+            "objetivo_estrategico",
+            "objetivo_estrategico_detalle",
             "nombre",
             "descripcion",
             "resultado_esperado",
@@ -59,6 +74,7 @@ class MetaSerializer(serializers.ModelSerializer):
         read_only_fields = [
             "id",
             "plan_detalle",
+            "objetivo_estrategico_detalle",
             "estado",
             "activa",
             "indicadores_count",
@@ -73,11 +89,34 @@ class MetaSerializer(serializers.ModelSerializer):
             "id": obj.plan.id,
             "nombre": obj.plan.nombre,
             "estado": obj.plan.estado,
+            "entidad": {
+                "id": obj.plan.entidad_id,
+                "codigo_oficial": obj.plan.entidad.codigo_oficial,
+                "nombre": obj.plan.entidad.nombre,
+            },
+        }
+
+    def get_objetivo_estrategico_detalle(self, obj):
+        if obj.objetivo_estrategico_id is None:
+            return None
+        objetivo = obj.objetivo_estrategico
+        return {
+            "id": objetivo.pk,
+            "codigo": objetivo.codigo,
+            "nombre": objetivo.nombre,
+            "estado": objetivo.estado,
+            "entidad": {
+                "id": objetivo.entidad_id,
+                "codigo_oficial": objetivo.entidad.codigo_oficial,
+                "nombre": objetivo.entidad.nombre,
+            },
         }
 
     def get_indicadores_count(self, obj):
         """Devuelve el número de indicadores asociados a la meta."""
 
+        if hasattr(obj, "indicadores_count_anotado"):
+            return obj.indicadores_count_anotado
         return obj.indicadores.count()
 
     def validate_nombre(self, value):
@@ -133,11 +172,62 @@ class MetaSerializer(serializers.ModelSerializer):
         _validar_alcance_plan(self, value)
         return value
 
+    def validate_objetivo_estrategico(self, value):
+        conserva_objetivo_existente = (
+            self.instance is not None
+            and value.pk == self.instance.objetivo_estrategico_id
+        )
+        if value.estado != EstadoCatalogo.ACTIVO and not conserva_objetivo_existente:
+            raise serializers.ValidationError(
+                "Solo puede utilizar un objetivo estratégico activo."
+            )
+
+        request = self.context.get("request")
+        usuario = getattr(request, "user", None)
+        if not usuario_puede_acceder_entidad(usuario, value.entidad_id):
+            raise PermissionDenied(
+                "No puede relacionar la meta con un objetivo de otra entidad."
+            )
+
+        if (
+            self.instance
+            and self.instance.objetivo_estrategico_id is not None
+            and value.pk != self.instance.objetivo_estrategico_id
+            and self.instance.indicadores.exists()
+        ):
+            raise serializers.ValidationError(
+                "No se puede cambiar el objetivo de una meta con indicadores."
+            )
+        return value
+
     def validate(self, attrs):
         """Valida la coherencia del rango de fechas de la meta."""
 
         fecha_inicio = attrs.get("fecha_inicio", getattr(self.instance, "fecha_inicio", None))
         fecha_fin = attrs.get("fecha_fin", getattr(self.instance, "fecha_fin", None))
+        plan = attrs.get("plan", getattr(self.instance, "plan", None))
+        objetivo = attrs.get(
+            "objetivo_estrategico",
+            getattr(self.instance, "objetivo_estrategico", None),
+        )
+
+        if objetivo is None:
+            raise serializers.ValidationError(
+                {
+                    "objetivo_estrategico": (
+                        "Debe seleccionar el objetivo estratégico de la meta."
+                    )
+                }
+            )
+
+        if plan and objetivo and plan.entidad_id != objetivo.entidad_id:
+            raise serializers.ValidationError(
+                {
+                    "objetivo_estrategico": (
+                        "El objetivo estratégico debe pertenecer a la entidad del plan."
+                    )
+                }
+            )
 
         if fecha_inicio and fecha_fin and fecha_fin < fecha_inicio:
             raise serializers.ValidationError(

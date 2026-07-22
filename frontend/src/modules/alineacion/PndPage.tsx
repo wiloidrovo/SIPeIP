@@ -1,4 +1,34 @@
 import { ResourcePage, optionsFrom } from "../../components/ResourcePage";
+import type { ApiRecord } from "../../services/api";
+
+function asRecord(value: unknown) {
+  return value && typeof value === "object"
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function entityContext(value: unknown) {
+  const entity = asRecord(value);
+  if (!entity) return "Entidad sin detalle";
+  const code = String(entity.codigo_oficial ?? "").trim();
+  const name = String(entity.nombre ?? "").trim();
+  return [code, name].filter(Boolean).join(" · ") || "Entidad sin detalle";
+}
+
+function strategicObjectiveLabel(item: ApiRecord) {
+  const code = String(item.codigo ?? "").trim();
+  const name = String(item.nombre ?? "").trim();
+  return `${[code, name].filter(Boolean).join(" · ")} — ${entityContext(item.entidad_detalle)}`;
+}
+
+function pndObjectiveLabel(item: ApiRecord) {
+  const axis = asRecord(item.eje_detalle);
+  const axisCode = String(axis?.codigo ?? "").trim();
+  const objectiveCode = String(item.codigo ?? "").trim();
+  const name = String(item.nombre ?? "").trim();
+  const context = axisCode ? `Eje ${axisCode}` : "Eje sin detalle";
+  return `${[objectiveCode, name].filter(Boolean).join(" · ")} — ${context}`;
+}
 
 export function PndPage() {
   return (
@@ -6,7 +36,7 @@ export function PndPage() {
       <ResourcePage
         eyebrow="Alineación nacional"
         title="Ejes del PND"
-        description="Administre los ejes utilizados para la alineación institucional."
+        description="Administre el nivel superior del catálogo PND utilizado para organizar sus objetivos nacionales."
         apiPath="/ejes-pnd/"
         viewPermission="alineaciones.ver"
         createPermission="alineaciones.gestionar_catalogos"
@@ -31,7 +61,7 @@ export function PndPage() {
       <ResourcePage
         eyebrow="Alineación nacional"
         title="Objetivos del PND"
-        description="Administre los objetivos agrupados por cada eje."
+        description="Administre los objetivos nacionales y el eje PND al que pertenece cada uno."
         apiPath="/objetivos-pnd/"
         viewPermission="alineaciones.ver"
         createPermission="alineaciones.gestionar_catalogos"
@@ -68,7 +98,7 @@ export function PndPage() {
       <ResourcePage
         eyebrow="Matriz estratégica"
         title="Alineación PND / ODS"
-        description="Relacione los objetivos institucionales con el PND y los ODS."
+        description="Defina cómo los objetivos estratégicos institucionales —y, mediante ellos, sus metas— contribuyen al PND y a los ODS."
         apiPath="/alineaciones/"
         viewPermission="alineaciones.ver"
         createPermission="alineaciones.gestionar"
@@ -82,7 +112,7 @@ export function PndPage() {
             required: true,
             loadOptions: optionsFrom(
               "/objetivos-estrategicos/",
-              (item) => `${String(item.codigo)} · ${String(item.nombre)}`,
+              strategicObjectiveLabel,
               (item) => String(item.estado) !== "ACTIVO",
             ),
           },
@@ -93,7 +123,7 @@ export function PndPage() {
             required: true,
             loadOptions: optionsFrom(
               "/objetivos-pnd/",
-              (item) => `${String(item.codigo)} · ${String(item.nombre)}`,
+              pndObjectiveLabel,
               (item) => String(item.estado) !== "ACTIVO",
             ),
           },
@@ -111,9 +141,48 @@ export function PndPage() {
           { name: "justificacion", label: "Justificación", type: "textarea", required: true },
         ]}
         columns={[
-          { key: "objetivo_estrategico_detalle.nombre", label: "Objetivo institucional" },
-          { key: "objetivo_pnd_detalle.nombre", label: "Objetivo PND" },
-          { key: "ods_detalle.nombre", label: "ODS" },
+          {
+            key: "objetivo_estrategico_detalle.nombre",
+            label: "Objetivo institucional / entidad",
+            render: (item) => {
+              const objective = asRecord(item.objetivo_estrategico_detalle);
+              const code = String(objective?.codigo ?? "").trim();
+              const name = String(objective?.nombre ?? "Sin objetivo");
+              return (
+                <span>
+                  {[code, name].filter(Boolean).join(" · ")}
+                  <small className="table-detail">{entityContext(item.entidad_detalle)}</small>
+                </span>
+              );
+            },
+          },
+          {
+            key: "objetivo_pnd_detalle.nombre",
+            label: "Objetivo PND / eje",
+            render: (item) => {
+              const objective = asRecord(item.objetivo_pnd_detalle);
+              const axis = asRecord(objective?.eje);
+              const code = String(objective?.codigo ?? "").trim();
+              const name = String(objective?.nombre ?? "Sin objetivo PND");
+              const axisCode = String(axis?.codigo ?? "").trim();
+              const axisName = String(axis?.nombre ?? "").trim();
+              return (
+                <span>
+                  {[code, name].filter(Boolean).join(" · ")}
+                  <small className="table-detail">{[axisCode, axisName].filter(Boolean).join(" · ") || "Eje sin detalle"}</small>
+                </span>
+              );
+            },
+          },
+          {
+            key: "ods_detalle.nombre",
+            label: "ODS",
+            render: (item) => {
+              const ods = asRecord(item.ods_detalle);
+              return `ODS ${String(ods?.numero ?? "–")} · ${String(ods?.nombre ?? "Sin detalle")}`;
+            },
+          },
+          { key: "justificacion", label: "Justificación" },
           { key: "estado", label: "Estado" },
           { key: "usuario_validador_detalle.nombre_completo", label: "Validado por" },
         ]}
@@ -122,6 +191,15 @@ export function PndPage() {
           { key: "rechazar", label: "Rechazar", permission: "alineaciones.validar", states: ["BORRADOR"], tone: "danger", confirm: "La alineación quedará rechazada para corrección." },
           { key: "reabrir", label: "Reabrir", permission: "alineaciones.gestionar", states: ["RECHAZADA"] },
         ]}
+        extraContent={(
+          <section className="panel dashboard-guidance" aria-label="Relación entre metas, objetivos y alineación nacional">
+            <div>
+              <span className="eyebrow">Cómo se relacionan</span>
+              <h2>Meta → Objetivo estratégico → PND / ODS</h2>
+              <p>Cada meta se asocia con un objetivo estratégico. En esta matriz se vincula ese objetivo institucional con un objetivo del PND y un ODS, sin duplicar la meta ni su avance.</p>
+            </div>
+          </section>
+        )}
         canEdit={(item) => String(item.estado) === "BORRADOR"}
         canDelete={(item) => String(item.estado) === "BORRADOR"}
       />

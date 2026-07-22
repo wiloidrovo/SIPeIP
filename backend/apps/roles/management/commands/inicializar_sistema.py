@@ -109,8 +109,8 @@ class Command(BaseCommand):
     def _inicializar_datos(self, password):
         entidades, unidades = self._crear_estructura_institucional()
         usuarios = self._crear_usuarios(password, entidades, unidades)
-        planes = self._crear_planificacion(entidades, usuarios)
         objetivos = self._crear_alineacion(entidades, usuarios)
+        planes = self._crear_planificacion(entidades, usuarios, objetivos)
         self._crear_proyecto(entidades, usuarios, planes, objetivos)
         self._crear_evento_inicial(entidades, usuarios)
 
@@ -254,7 +254,7 @@ class Command(BaseCommand):
             usuarios[username] = _guardar_validado(usuario)
         return usuarios
 
-    def _crear_planificacion(self, entidades, usuarios):
+    def _crear_planificacion(self, entidades, usuarios, objetivos):
         plan_secretaria = _actualizar_o_crear(
             Plan,
             {
@@ -302,6 +302,7 @@ class Command(BaseCommand):
                 usuarios["administrador"],
                 usuarios["supervisor"],
                 Decimal("62.00"),
+                objetivos["secretaria"],
             ),
             (
                 plan_ministerio,
@@ -310,13 +311,23 @@ class Command(BaseCommand):
                 usuarios["planificador"],
                 None,
                 Decimal("48.00"),
+                objetivos["ministerio"],
             ),
         )
-        for plan, nombre_meta, nombre_indicador, registrador, validador, valor in especificaciones:
+        for (
+            plan,
+            nombre_meta,
+            nombre_indicador,
+            registrador,
+            validador,
+            valor,
+            objetivo,
+        ) in especificaciones:
             meta = _actualizar_o_crear(
                 Meta,
                 {"plan": plan, "nombre": nombre_meta},
                 {
+                    "objetivo_estrategico": objetivo,
                     "descripcion": "Resultado institucional previsto para el periodo.",
                     "resultado_esperado": (
                         "Incrementar el cumplimiento de los objetivos institucionales."

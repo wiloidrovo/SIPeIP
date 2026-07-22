@@ -1,75 +1,53 @@
-# React + TypeScript + Vite
+# Frontend de SIPeIP
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Aplicación web de SIPeIP construida con React, TypeScript, React Router y Vite.
 
-Currently, two official plugins are available:
+La interfaz utiliza un layout institucional común, rutas protegidas, navegación condicionada por permisos y módulos separados para autenticación, administración, planificación, alineación, proyectos, reportes y auditoría.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Requisitos
 
-## React Compiler
+- Node.js 18 o superior
+- npm
+- API de Django disponible en `http://localhost:8000`
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Instalación
 
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-
+```powershell
+cd frontend
+npm ci
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## Desarrollo
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-
+```powershell
+npm run dev
 ```
+
+La aplicación queda disponible en `http://localhost:5173`.
+
+## Compilación
+
+```powershell
+npm run build
+```
+
+El comando ejecuta la comprobación de TypeScript y genera el paquete de producción en `dist/`. Ese directorio es un artefacto local y no se versiona.
+
+## Organización
+
+```text
+src/
+├── app/          Router principal
+├── auth/         Sesión, rutas y guardas de permisos
+├── components/   Componentes reutilizables
+├── layouts/      Layout y navegación institucional
+├── modules/      Módulos funcionales
+├── pages/        Páginas generales
+├── services/     Cliente de la API
+├── styles/       Estilos compartidos
+└── utils/        Validaciones y utilidades
+```
+
+Todas las solicitudes utilizan la sesión del backend mediante cookies y `credentials: "include"`. Las operaciones de escritura envían el token CSRF; la autorización efectiva siempre se verifica nuevamente en Django REST Framework.
+
+La instalación completa, los usuarios locales, las rutas y el recorrido de validación se documentan en el [README principal](../README.md).

@@ -14,9 +14,13 @@ export function Modal({
   wide?: boolean;
 }>) {
   const closeRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (open) closeRef.current?.focus();
+  }, [open]);
+
   useEffect(() => {
     if (!open) return;
-    closeRef.current?.focus();
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") onClose();
     };

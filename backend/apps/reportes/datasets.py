@@ -124,11 +124,22 @@ def metas_indicadores(usuario, filtros):
     if filtros.get("estado"):
         metas = metas.filter(estado=filtros["estado"])
     metas = _filtrar_por_texto(
-        metas, filtros.get("buscar"), ("nombre", "plan__nombre", "plan__entidad__nombre")
+        metas,
+        filtros.get("buscar"),
+        (
+            "nombre",
+            "plan__nombre",
+            "plan__entidad__nombre",
+            "objetivo_estrategico__codigo",
+            "objetivo_estrategico__nombre",
+        ),
     )
-    indicadores = Indicador.objects.select_related("meta", "meta__plan", "meta__plan__entidad").filter(
-        meta__in=metas
-    )
+    indicadores = Indicador.objects.select_related(
+        "meta",
+        "meta__plan",
+        "meta__plan__entidad",
+        "meta__objetivo_estrategico",
+    ).filter(meta__in=metas)
     if filtros.get("activo") is not None:
         indicadores = indicadores.filter(activo=filtros["activo"])
     for item in indicadores.order_by("meta__plan__nombre", "meta__nombre", "nombre")[: filtros["limite"]]:
@@ -136,6 +147,12 @@ def metas_indicadores(usuario, filtros):
             "entidad": item.meta.plan.entidad.nombre if item.meta.plan.entidad else "",
             "plan": item.meta.plan.nombre,
             "meta": item.meta.nombre,
+            "objetivo_estrategico": (
+                f"{item.meta.objetivo_estrategico.codigo} - "
+                f"{item.meta.objetivo_estrategico.nombre}"
+                if item.meta.objetivo_estrategico_id
+                else ""
+            ),
             "estado_meta": item.meta.estado,
             "indicador": item.nombre,
             "unidad_medida": item.unidad_medida,
@@ -317,6 +334,7 @@ DATASETS = {
             "metas-indicadores", "Metas e indicadores", "Medición de metas institucionales.",
             ("metas.ver", "indicadores.ver"),
             (("entidad", "Entidad"), ("plan", "Plan"), ("meta", "Meta"),
+             ("objetivo_estrategico", "Objetivo estratégico"),
              ("estado_meta", "Estado meta"), ("indicador", "Indicador"),
              ("unidad_medida", "Unidad"), ("valor_base", "Base"),
              ("valor_meta", "Valor meta"), ("valor_actual", "Actual"),

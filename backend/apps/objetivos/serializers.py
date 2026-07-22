@@ -73,6 +73,8 @@ class ObjetivoEstrategicoSerializer(_CatalogoTextoSerializer):
         queryset=EntidadInstitucional.objects.all()
     )
     entidad_detalle = serializers.SerializerMethodField()
+    metas_count = serializers.SerializerMethodField()
+    alineaciones_count = serializers.SerializerMethodField()
 
     class Meta:
         model = ObjetivoEstrategico
@@ -84,6 +86,8 @@ class ObjetivoEstrategicoSerializer(_CatalogoTextoSerializer):
             "nombre",
             "descripcion",
             "estado",
+            "metas_count",
+            "alineaciones_count",
             "fecha_creacion",
             "fecha_actualizacion",
         ]
@@ -91,12 +95,24 @@ class ObjetivoEstrategicoSerializer(_CatalogoTextoSerializer):
             "id",
             "entidad_detalle",
             "estado",
+            "metas_count",
+            "alineaciones_count",
             "fecha_creacion",
             "fecha_actualizacion",
         ]
 
     def get_entidad_detalle(self, obj):
         return _resumen_entidad(obj.entidad)
+
+    def get_metas_count(self, obj):
+        if hasattr(obj, "metas_count_anotado"):
+            return obj.metas_count_anotado
+        return obj.metas.count()
+
+    def get_alineaciones_count(self, obj):
+        if hasattr(obj, "alineaciones_count_anotado"):
+            return obj.alineaciones_count_anotado
+        return obj.alineaciones.count()
 
     def validate(self, attrs):
         instance = self.instance

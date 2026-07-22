@@ -1,4 +1,5 @@
 from django.db import transaction
+from django.db.models import Count
 from django.db.models.deletion import ProtectedError
 from rest_framework import filters, status, viewsets
 from rest_framework.decorators import action
@@ -109,7 +110,10 @@ class ObjetivoEstrategicoViewSet(
     )
 
     def get_queryset(self):
-        queryset = ObjetivoEstrategico.objects.select_related("entidad")
+        queryset = ObjetivoEstrategico.objects.select_related("entidad").annotate(
+            metas_count_anotado=Count("metas", distinct=True),
+            alineaciones_count_anotado=Count("alineaciones", distinct=True),
+        )
         queryset = filtrar_queryset_por_entidad(
             queryset,
             self.request.user,
