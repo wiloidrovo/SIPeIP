@@ -1,4 +1,8 @@
 import { ResourcePage, optionsFrom } from "../../components/ResourcePage";
+import type {
+  SelectFilterContext,
+  SelectOption,
+} from "../../components/ResourcePage";
 import type { ApiRecord } from "../../services/api";
 
 const editablePlanStates = new Set(["BORRADOR", "DEVUELTO", "RECHAZADO"]);
@@ -15,6 +19,38 @@ function entityContext(value: unknown) {
   const code = String(entity.codigo_oficial ?? "").trim();
   const name = String(entity.nombre ?? "").trim();
   return [code, name].filter(Boolean).join(" · ") || "Entidad sin detalle";
+}
+
+function optionEntityId(option: SelectOption) {
+  const record = option.record;
+  const directEntity = record?.entidad;
+  if (typeof directEntity === "number" || typeof directEntity === "string") {
+    return String(directEntity);
+  }
+  const detail = asRecord(record?.entidad_detalle);
+  return detail?.id === undefined ? "" : String(detail.id);
+}
+
+function selectedOption(
+  fieldName: string,
+  context: SelectFilterContext,
+) {
+  const selectedValue = String(context.values[fieldName] ?? "");
+  return (context.options[fieldName] ?? []).find(
+    (option) => String(option.value) === selectedValue,
+  );
+}
+
+function objectiveMatchesSelectedPlan(
+  option: SelectOption,
+  context: SelectFilterContext,
+) {
+  const selectedPlan = selectedOption("plan", context);
+  return Boolean(
+    selectedPlan
+    && optionEntityId(selectedPlan)
+    && optionEntityId(selectedPlan) === optionEntityId(option),
+  );
 }
 
 const plans = optionsFrom(
@@ -57,13 +93,26 @@ export function MetasPage() {
       editPermission="metas.editar"
       deletePermission="metas.eliminar"
       fields={[
-        { name: "plan", label: "Plan institucional", type: "select", required: true, loadOptions: plans },
+        {
+          name: "plan",
+          label: "Plan institucional",
+          type: "select",
+          required: true,
+          loadOptions: plans,
+          helpText: "Solo puede seleccionar planes en Borrador, Devuelto o Rechazado.",
+          emptyOptionsMessage: "No hay planes editables disponibles.",
+        },
         {
           name: "objetivo_estrategico",
           label: "Objetivo estratégico al que contribuye",
           type: "select",
           required: true,
           loadOptions: strategicObjectives,
+          filterOptions: objectiveMatchesSelectedPlan,
+          dependsOn: ["plan"],
+          emptyOptionsMessage: (context) => context.values.plan
+            ? "No hay objetivos activos para la entidad del plan."
+            : "Seleccione primero un plan editable.",
         },
         { name: "nombre", label: "Nombre", required: true },
         { name: "descripcion", label: "Descripción", type: "textarea" },

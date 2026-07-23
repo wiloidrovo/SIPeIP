@@ -11,7 +11,15 @@ export type SelectOption = {
   value: string | number;
   label: string;
   disabled?: boolean;
+  record?: ApiRecord;
 };
+
+export type SelectFilterContext = {
+  values: Record<string, unknown>;
+  options: Record<string, SelectOption[]>;
+  editing: ApiRecord | null;
+};
+
 export type ResourceField = {
   name: string;
   label: string;
@@ -26,6 +34,15 @@ export type ResourceField = {
   min?: number;
   max?: number;
   step?: string;
+  helpText?: string;
+  emptyOptionsMessage?:
+    | string
+    | ((context: SelectFilterContext) => string);
+  filterOptions?: (
+    option: SelectOption,
+    context: SelectFilterContext,
+  ) => boolean;
+  dependsOn?: string[];
 };
 
 export type ResourceColumn = {
@@ -131,6 +148,44 @@ function structuredValue(value: unknown): ReactNode {
   return displayValue(value);
 }
 
+type OptionLoadState = {
+  loading: boolean;
+  error: string;
+};
+
+function resolveSelectOptions(
+  field: ResourceField,
+  values: Record<string, unknown>,
+  optionMap: Record<string, SelectOption[]>,
+  editing: ApiRecord | null,
+  fallback: SelectOption[] = [],
+) {
+  const context: SelectFilterContext = {
+    values,
+    options: optionMap,
+    editing,
+  };
+  const selectedValue = String(values[field.name] ?? "");
+  const candidates = optionMap[field.name] ?? field.options ?? fallback;
+  return candidates.filter((option) => {
+    if (field.filterOptions && !field.filterOptions(option, context)) {
+      return false;
+    }
+    if (!option.disabled) return true;
+    return Boolean(editing && String(option.value) === selectedValue);
+  });
+}
+
+function resolveEmptyOptionsMessage(
+  field: ResourceField,
+  context: SelectFilterContext,
+) {
+  if (typeof field.emptyOptionsMessage === "function") {
+    return field.emptyOptionsMessage(context);
+  }
+  return field.emptyOptionsMessage ?? "No hay opciones disponibles.";
+}
+
 export function ResourcePage(props: ResourcePageProps) {
   const { hasPermission, hasAllPermissions, user } = useAuth();
   const api = useMemo(() => resourceApi<ApiRecord>(props.apiPath), [props.apiPath]);
@@ -143,6 +198,7 @@ export function ResourcePage(props: ResourcePageProps) {
   const [formOpen, setFormOpen] = useState(false);
   const [form, setForm] = useState<Record<string, unknown>>(props.initialValues ?? {});
   const [options, setOptions] = useState<Record<string, SelectOption[]>>({});
+  const [optionLoadStates, setOptionLoadStates] = useState<Record<string, OptionLoadState>>({});
   const [feedback, setFeedback] = useState<{ text: string; tone: "success" | "error" | "info" }>({ text: "", tone: "info" });
   const [confirmation, setConfirmation] = useState<{ kind: "delete" | "action"; record: ApiRecord; action?: ResourceAction } | null>(null);
   const [actionForm, setActionForm] = useState<{ record: ApiRecord; action: ResourceAction } | null>(null);
@@ -172,11 +228,72 @@ export function ResourcePage(props: ResourcePageProps) {
     const formFields = canCreateRecords || canEditRecords ? props.fields ?? [] : [];
     for (const field of [...formFields, ...(props.filters ?? [])]) {
       if (!field.loadOptions) continue;
+      setOptionLoadStates((current) => ({
+        ...current,
+        [field.name]: { loading: true, error: "" },
+      }));
       field.loadOptions()
-        .then((items) => setOptions((current) => ({ ...current, [field.name]: items })))
-        .catch(() => setOptions((current) => ({ ...current, [field.name]: [] })));
+        .then((items) => {
+          setOptions((current) => ({ ...current, [field.name]: items }));
+          setOptionLoadStates((current) => ({
+            ...current,
+            [field.name]: { loading: false, error: "" },
+          }));
+        })
+        .catch((error: unknown) => {
+          setOptions((current) => ({ ...current, [field.name]: [] }));
+          setOptionLoadStates((current) => ({
+            ...current,
+            [field.name]: {
+              loading: false,
+              error: error instanceof Error
+                ? error.message
+                : "No se pudieron cargar las opciones.",
+            },
+          }));
+        });
     }
   }, [canCreateRecords, canEditRecords, props.fields, props.filters]);
+
+  function updateFormValue(fieldName: string, value: unknown) {
+    setForm((current) => {
+      const next = { ...current, [fieldName]: value };
+      const fields = props.fields ?? [];
+      for (const field of fields) {
+        if (
+          field.type !== "select"
+          || !field.filterOptions
+          || !field.dependsOn?.includes(fieldName)
+          || field.name === fieldName
+          || next[field.name] === ""
+          || next[field.name] === null
+          || next[field.name] === undefined
+        ) {
+          continue;
+        }
+        const available = resolveSelectOptions(
+          field,
+          next,
+          options,
+          editing,
+          field.name === "entidad" && user?.institucion
+            ? [{
+              value: user.institucion.id,
+              label: `${user.institucion.codigo_oficial} · ${user.institucion.nombre}`,
+            }]
+            : [],
+        );
+        if (
+          !available.some(
+            (option) => String(option.value) === String(next[field.name]),
+          )
+        ) {
+          next[field.name] = "";
+        }
+      }
+      return next;
+    });
+  }
 
   function openCreate() {
     setEditing(null);
@@ -265,11 +382,28 @@ export function ResourcePage(props: ResourcePageProps) {
     if (action.formFields?.length) {
       await Promise.all(action.formFields.map(async (field) => {
         if (!field.loadOptions) return;
+        setOptionLoadStates((current) => ({
+          ...current,
+          [field.name]: { loading: true, error: "" },
+        }));
         try {
           const items = await field.loadOptions(record);
           setOptions((current) => ({ ...current, [field.name]: items }));
-        } catch {
+          setOptionLoadStates((current) => ({
+            ...current,
+            [field.name]: { loading: false, error: "" },
+          }));
+        } catch (error) {
           setOptions((current) => ({ ...current, [field.name]: [] }));
+          setOptionLoadStates((current) => ({
+            ...current,
+            [field.name]: {
+              loading: false,
+              error: error instanceof Error
+                ? error.message
+                : "No se pudieron cargar las opciones.",
+            },
+          }));
         }
       }));
       setActionValues(Object.fromEntries(action.formFields.map((field) => [field.name, field.type === "checkbox" ? false : ""])));
@@ -375,20 +509,114 @@ export function ResourcePage(props: ResourcePageProps) {
 
       <Modal open={formOpen} onClose={() => setFormOpen(false)} title={editing ? `Editar ${props.title.toLowerCase()}` : `Nuevo registro en ${props.title.toLowerCase()}`}>
         <form className="resource-form" onSubmit={submit}>
-          {(props.fields ?? []).filter((field) => !(editing && field.createOnly)).map((field) => (
-            field.type === "checkbox" ? (
-              <label className="checkbox-field" key={field.name}><input type="checkbox" checked={Boolean(form[field.name])} disabled={Boolean(editing && field.readOnlyOnEdit)} onChange={(event) => setForm((current) => ({ ...current, [field.name]: event.target.checked }))} /><span>{field.label}</span></label>
-            ) : (
-              <label key={field.name}><span>{field.label}{field.required ? " *" : ""}</span>
-                {field.type === "textarea" ? <textarea required={field.required} disabled={Boolean(editing && field.readOnlyOnEdit)} value={String(form[field.name] ?? "")} placeholder={field.placeholder} onChange={(event) => setForm((current) => ({ ...current, [field.name]: event.target.value }))} /> : field.type === "select" ? (
-                  <select required={field.required} disabled={Boolean(editing && field.readOnlyOnEdit)} value={String(form[field.name] ?? "")} onChange={(event) => setForm((current) => ({ ...current, [field.name]: event.target.value }))}>
-                    <option value="">Seleccione</option>
-                    {(options[field.name] ?? field.options ?? (field.name === "entidad" && user?.institucion ? [{ value: user.institucion.id, label: `${user.institucion.codigo_oficial} · ${user.institucion.nombre}` }] : [])).map((option) => <option disabled={option.disabled} key={String(option.value)} value={option.value}>{option.label}</option>)}
-                  </select>
-                ) : <input type={field.type ?? "text"} required={field.required} disabled={Boolean(editing && field.readOnlyOnEdit)} min={field.min} max={field.max} step={field.step} value={String(form[field.name] ?? "")} placeholder={field.placeholder} autoComplete={field.type === "password" ? "new-password" : undefined} onChange={(event) => setForm((current) => ({ ...current, [field.name]: event.target.value }))} />}
+          {(props.fields ?? []).filter((field) => !(editing && field.createOnly)).map((field) => {
+            if (field.type === "checkbox") {
+              return (
+                <label className="checkbox-field" key={field.name}>
+                  <input
+                    type="checkbox"
+                    checked={Boolean(form[field.name])}
+                    disabled={Boolean(editing && field.readOnlyOnEdit)}
+                    onChange={(event) => updateFormValue(field.name, event.target.checked)}
+                  />
+                  <span>{field.label}</span>
+                </label>
+              );
+            }
+
+            const fallback = field.name === "entidad" && user?.institucion
+              ? [{
+                value: user.institucion.id,
+                label: `${user.institucion.codigo_oficial} · ${user.institucion.nombre}`,
+              }]
+              : [];
+            const selectOptions = resolveSelectOptions(
+              field,
+              form,
+              options,
+              editing,
+              fallback,
+            );
+            const loadState = optionLoadStates[field.name];
+            const waitingForOptions = Boolean(
+              field.loadOptions
+              && !(field.name in options)
+              && !loadState?.error,
+            ) || Boolean(loadState?.loading);
+            const emptyMessage = resolveEmptyOptionsMessage(field, {
+              values: form,
+              options,
+              editing,
+            });
+            const selectDisabled = Boolean(
+              editing && field.readOnlyOnEdit,
+            ) || waitingForOptions || Boolean(loadState?.error) || selectOptions.length === 0;
+
+            return (
+              <label key={field.name}>
+                <span>{field.label}{field.required ? " *" : ""}</span>
+                {field.type === "textarea" ? (
+                  <textarea
+                    required={field.required}
+                    disabled={Boolean(editing && field.readOnlyOnEdit)}
+                    value={String(form[field.name] ?? "")}
+                    placeholder={field.placeholder}
+                    onChange={(event) => updateFormValue(field.name, event.target.value)}
+                  />
+                ) : field.type === "select" ? (
+                  <>
+                    <select
+                      required={field.required}
+                      disabled={selectDisabled}
+                      value={String(form[field.name] ?? "")}
+                      onChange={(event) => updateFormValue(field.name, event.target.value)}
+                    >
+                      <option value="">
+                        {waitingForOptions
+                          ? "Cargando opciones…"
+                          : loadState?.error
+                            ? "No se pudieron cargar las opciones"
+                            : selectOptions.length === 0
+                              ? emptyMessage
+                              : "Seleccione"}
+                      </option>
+                      {selectOptions.map((option) => (
+                        <option
+                          disabled={option.disabled}
+                          key={String(option.value)}
+                          value={option.value}
+                        >
+                          {option.label}{option.disabled ? " (selección actual)" : ""}
+                        </option>
+                      ))}
+                    </select>
+                    {loadState?.error ? (
+                      <small className="field-help field-help--error">
+                        {loadState.error}
+                      </small>
+                    ) : field.helpText ? (
+                      <small className="field-help">{field.helpText}</small>
+                    ) : selectOptions.length === 0 && !waitingForOptions ? (
+                      <small className="field-help">{emptyMessage}</small>
+                    ) : null}
+                  </>
+                ) : (
+                  <input
+                    type={field.type ?? "text"}
+                    required={field.required}
+                    disabled={Boolean(editing && field.readOnlyOnEdit)}
+                    min={field.min}
+                    max={field.max}
+                    step={field.step}
+                    value={String(form[field.name] ?? "")}
+                    placeholder={field.placeholder}
+                    autoComplete={field.type === "password" ? "new-password" : undefined}
+                    onChange={(event) => updateFormValue(field.name, event.target.value)}
+                  />
+                )}
               </label>
-            )
-          ))}
+            );
+          })}
           <p className="form-hint">Los campos marcados con * son obligatorios.</p>
           <div className="form-actions"><button type="button" className="button button--secondary" onClick={() => setFormOpen(false)}>Cancelar</button><button type="submit" className="button button--primary" disabled={saving}>{saving ? "Guardando…" : "Guardar"}</button></div>
         </form>
@@ -420,6 +648,7 @@ export function optionsFrom(
       value: record.id,
       label: label(record),
       disabled: disabled?.(record) ?? false,
+      record,
     }));
   };
 }

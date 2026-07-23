@@ -2,11 +2,37 @@ import { useState } from "react";
 import type { ReactNode } from "react";
 import { useAuth } from "../../auth/AuthContext";
 import { ResourcePage, optionsFrom } from "../../components/ResourcePage";
+import type {
+  SelectFilterContext,
+  SelectOption,
+} from "../../components/ResourcePage";
 import { apiRequest, normalizeList } from "../../services/api";
 import type { ApiRecord } from "../../services/api";
 
-const projects = optionsFrom("/proyectos/", (item) => `${String(item.codigo)} · ${String(item.nombre)}`);
-const tipologies = optionsFrom("/tipologias-intervencion/", (item) => `${String(item.codigo)} · ${String(item.nombre)}`);
+const editableProjectStates = new Set(["BORRADOR", "PLANIFICADO"]);
+const projects = optionsFrom(
+  "/proyectos/",
+  (item) => `${String(item.codigo)} · ${String(item.nombre)}`,
+  (item) => !editableProjectStates.has(String(item.estado)),
+);
+const tipologies = optionsFrom(
+  "/tipologias-intervencion/",
+  (item) => `${String(item.codigo)} · ${String(item.nombre)}`,
+  (item) => item.activo !== true,
+);
+
+function optionEntityId(option: SelectOption) {
+  const entity = option.record?.entidad;
+  return entity === null || entity === undefined ? "" : String(entity);
+}
+
+function matchesSelectedEntity(
+  option: SelectOption,
+  context: SelectFilterContext,
+) {
+  const entityId = String(context.values.entidad ?? "");
+  return Boolean(entityId && optionEntityId(option) === entityId);
+}
 
 async function projectMilestones(record?: ApiRecord) {
   const payload = await apiRequest<ApiRecord[] | { results: ApiRecord[] }>("/hitos-proyectos/", { notify: false });
@@ -41,14 +67,78 @@ export function ProyectosPage() {
       editPermission="proyectos.editar"
       deletePermission="proyectos.eliminar"
       fields={[
-        { name: "entidad", label: "Entidad", type: "select", required: true, readOnlyOnEdit: true, loadOptions: optionsFrom("/configuracion/entidades/", (item) => `${String(item.codigo_oficial)} · ${String(item.nombre)}`) },
-        { name: "plan", label: "Plan", type: "select", required: true, loadOptions: optionsFrom("/planes/", (item) => String(item.nombre)) },
-        { name: "objetivo_estrategico", label: "Objetivo estratégico", type: "select", required: true, loadOptions: optionsFrom("/objetivos-estrategicos/", (item) => `${String(item.codigo)} · ${String(item.nombre)}`) },
+        {
+          name: "entidad",
+          label: "Entidad",
+          type: "select",
+          required: true,
+          readOnlyOnEdit: true,
+          loadOptions: optionsFrom(
+            "/configuracion/entidades/",
+            (item) => `${String(item.codigo_oficial)} · ${String(item.nombre)}`,
+            (item) => String(item.estado) !== "ACTIVA",
+          ),
+          emptyOptionsMessage: "No hay entidades activas dentro de su ámbito.",
+        },
+        {
+          name: "plan",
+          label: "Plan",
+          type: "select",
+          required: true,
+          loadOptions: optionsFrom(
+            "/planes/",
+            (item) => String(item.nombre),
+            (item) => item.activo !== true || String(item.estado) === "ARCHIVADO",
+          ),
+          filterOptions: matchesSelectedEntity,
+          dependsOn: ["entidad"],
+          emptyOptionsMessage: (context) => context.values.entidad
+            ? "No hay planes activos para la entidad seleccionada."
+            : "Seleccione primero una entidad.",
+        },
+        {
+          name: "objetivo_estrategico",
+          label: "Objetivo estratégico",
+          type: "select",
+          required: true,
+          loadOptions: optionsFrom(
+            "/objetivos-estrategicos/",
+            (item) => `${String(item.codigo)} · ${String(item.nombre)}`,
+            (item) => String(item.estado) !== "ACTIVO",
+          ),
+          filterOptions: matchesSelectedEntity,
+          dependsOn: ["entidad"],
+          emptyOptionsMessage: (context) => context.values.entidad
+            ? "No hay objetivos activos para la entidad seleccionada."
+            : "Seleccione primero una entidad.",
+        },
         { name: "codigo", label: "Código", required: true },
         { name: "nombre", label: "Nombre", required: true },
         { name: "descripcion", label: "Descripción", type: "textarea" },
-        { name: "tipologia_intervencion", label: "Tipología de intervención", type: "select", required: true, loadOptions: tipologies },
-        ...(hasPermission("usuarios.ver") ? [{ name: "responsable", label: "Responsable", type: "select" as const, emptyAsNull: true, loadOptions: optionsFrom("/usuarios/", (item) => `${String(item.first_name)} ${String(item.last_name)}`.trim() || String(item.username)) }] : []),
+        {
+          name: "tipologia_intervencion",
+          label: "Tipología de intervención",
+          type: "select",
+          required: true,
+          loadOptions: tipologies,
+          emptyOptionsMessage: "No hay tipologías activas disponibles.",
+        },
+        ...(hasPermission("usuarios.ver") ? [{
+          name: "responsable",
+          label: "Responsable",
+          type: "select" as const,
+          emptyAsNull: true,
+          loadOptions: optionsFrom(
+            "/usuarios/",
+            (item) => `${String(item.first_name)} ${String(item.last_name)}`.trim() || String(item.username),
+            (item) => item.is_active !== true || String(item.estado) !== "ACTIVO",
+          ),
+          filterOptions: matchesSelectedEntity,
+          dependsOn: ["entidad"],
+          emptyOptionsMessage: (context: SelectFilterContext) => context.values.entidad
+            ? "No hay usuarios activos en la entidad seleccionada."
+            : "Seleccione primero una entidad.",
+        }] : []),
         { name: "fecha_inicio", label: "Fecha de inicio", type: "date", required: true },
         { name: "fecha_fin", label: "Fecha de fin", type: "date", required: true },
         { name: "presupuesto_estimado", label: "Presupuesto estimado", type: "number", min: 0, step: "0.01", required: true },
@@ -87,7 +177,16 @@ export function ProyectosPage() {
     <section className="project-secondary" aria-label="Información complementaria de proyectos">
       <SecondarySection title="Cronograma e hitos" description="Defina etapas y fechas planificadas.">
         <ResourcePage eyebrow="Cronograma" title="Hitos de proyectos" description="Organice las etapas que componen cada proyecto." apiPath="/hitos-proyectos/" viewPermission="proyectos.ver" createPermission="proyectos.editar" editPermission="proyectos.editar" deletePermission="proyectos.editar" fields={[
-          { name: "proyecto", label: "Proyecto", type: "select", required: true, readOnlyOnEdit: true, loadOptions: projects },
+          {
+            name: "proyecto",
+            label: "Proyecto",
+            type: "select",
+            required: true,
+            readOnlyOnEdit: true,
+            loadOptions: projects,
+            helpText: "Los hitos solo pueden gestionarse en proyectos en Borrador o Planificado.",
+            emptyOptionsMessage: "No hay proyectos editables disponibles.",
+          },
           { name: "orden", label: "Orden", type: "number", min: 1, required: true },
           { name: "nombre", label: "Nombre", required: true },
           { name: "descripcion", label: "Descripción", type: "textarea" },

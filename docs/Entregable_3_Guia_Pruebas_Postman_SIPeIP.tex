@@ -1,0 +1,1022 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[spanish,es-nodecimaldot]{babel}
+\usepackage{lmodern}
+\usepackage{geometry}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{xurl}
+\usepackage{enumitem}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{array}
+\usepackage{listings}
+\usepackage{fancyhdr}
+
+\geometry{top=2cm,bottom=2cm,left=2.1cm,right=2.1cm}
+\definecolor{AzulSipeip}{HTML}{0B2A45}
+\definecolor{CelesteSipeip}{HTML}{146C94}
+\definecolor{FondoCodigo}{HTML}{F5F7F9}
+\definecolor{BordeCodigo}{HTML}{D7DEE5}
+\definecolor{VerdeResultado}{HTML}{176B3A}
+\definecolor{RojoAtencion}{HTML}{9A3412}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=AzulSipeip,
+  urlcolor=CelesteSipeip,
+  pdftitle={Guía práctica de pruebas de SIPeIP en Postman}
+}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textcolor{AzulSipeip}{SIPeIP}}
+\fancyhead[R]{\small Pruebas manuales en Postman}
+\fancyfoot[C]{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.55em}
+\setlist[enumerate]{leftmargin=1.7em,itemsep=0.3em,topsep=0.3em}
+\setlist[itemize]{leftmargin=1.5em,itemsep=0.25em,topsep=0.3em}
+\newcolumntype{Y}{>{\raggedright\arraybackslash}X}
+
+\lstdefinestyle{postman}{
+  backgroundcolor=\color{FondoCodigo},
+  basicstyle=\ttfamily\small,
+  breaklines=true,
+  columns=fullflexible,
+  frame=single,
+  rulecolor=\color{BordeCodigo},
+  framerule=0.5pt,
+  showstringspaces=false,
+  xleftmargin=0.2em,
+  xrightmargin=0.2em,
+  aboveskip=0.4em,
+  belowskip=0.55em,
+  literate=
+    {á}{{\'a}}1 {é}{{\'e}}1 {í}{{\'i}}1 {ó}{{\'o}}1 {ú}{{\'u}}1
+    {Á}{{\'A}}1 {É}{{\'E}}1 {Í}{{\'I}}1 {Ó}{{\'O}}1 {Ú}{{\'U}}1
+    {ñ}{{\~n}}1 {Ñ}{{\~N}}1 {ü}{{\"u}}1
+}
+\lstset{style=postman}
+
+\newcommand{\esperado}[1]{\textcolor{VerdeResultado}{\textbf{Resultado esperado:}} #1}
+\newcommand{\atencion}[1]{\textcolor{RojoAtencion}{\textbf{Importante:}} #1}
+\newcommand{\metodo}[1]{\textbf{Método:} \texttt{#1}}
+
+\begin{document}
+
+{\LARGE\bfseries\color{AzulSipeip} Guía práctica para probar SIPeIP en Postman}
+
+Esta guía empieza directamente con las pruebas. El backend debe estar disponible en \url{http://localhost:8000} y los seis usuarios ya deben existir. No es necesario configurar Bearer Token ni escribir cookies manualmente.
+
+En los datos demostrativos, \textbf{SNP} corresponde a la Secretaría Nacional de Planificación y \textbf{MDI} es una institución pública externa ficticia usada únicamente para probar el aislamiento entre entidades.
+
+\atencion{Las pruebas funcionales crean registros reales en la base local, aprueban un plan demostrativo y agregan avances. Los nombres y códigos GUIA permiten reconocer esos registros. Para repetir una creación use otro sufijo, por ejemplo GUIA-02.}
+
+\section{Lo único que debe saber antes de enviar solicitudes}
+
+\subsection{Postman conservará la sesión}
+
+SIPeIP inicia sesión mediante cookies. Postman guarda esas cookies automáticamente después de un login correcto siempre que todas las URLs usen \path{localhost}. No cambie algunas URLs a \path{127.0.0.1}.
+
+En la pestaña \textbf{Authorization} de cada solicitud seleccione \textbf{No Auth}. No agregue \path{Authorization}, \path{Bearer Token}, \path{Cookie} ni \path{sessionid} por su cuenta.
+
+\subsection{Qué es el token CSRF y dónde se coloca}
+
+Antes de enviar un \path{POST}, \path{PATCH}, \path{PUT} o \path{DELETE}, SIPeIP exige un código temporal llamado CSRF. Ese código demuestra que la solicitud pertenece a la misma sesión de Postman.
+
+Para obtenerlo:
+
+\begin{enumerate}
+  \item Cree una solicitud nueva en Postman.
+  \item Seleccione el método \textbf{GET}.
+  \item Pegue esta URL y pulse \textbf{Send}:
+\end{enumerate}
+
+\begin{lstlisting}
+http://localhost:8000/api/auth/csrf/
+\end{lstlisting}
+
+La respuesta será parecida a esta:
+
+\begin{lstlisting}
+{
+  "detail": "Token CSRF preparado correctamente.",
+  "csrf_token": "valor-largo-generado-por-django"
+}
+\end{lstlisting}
+
+Copie únicamente el contenido de \path{csrf_token}, sin las comillas.
+
+Cuando esta guía indique un \path{POST}, \path{PATCH} o \path{DELETE}, abra la pestaña \textbf{Headers} de esa solicitud y agregue exactamente estas dos filas:
+
+\begin{center}
+\begin{tabularx}{0.9\textwidth}{Y Y}
+\toprule
+\textbf{Key} & \textbf{Value} \\
+\midrule
+\path{Content-Type} & \path{application/json} \\
+\path{X-CSRFToken} & Pegue aquí el valor de \path{csrf_token} \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+Para colocar un JSON, abra \textbf{Body}, seleccione \textbf{raw} y luego seleccione \textbf{JSON} en la lista que aparece a la derecha.
+
+\atencion{Django cambia el token CSRF cuando el login es correcto. Por eso, inmediatamente después de iniciar sesión debe volver a ejecutar \path{GET /api/auth/csrf/} y copiar el nuevo token.}
+
+\subsection{Cómo cambiar de usuario durante las pruebas}
+
+Cada vez que la guía pida usar otro perfil:
+
+\begin{enumerate}
+  \item Si hay una sesión abierta y no recuerda el token actual, ejecute primero \path{GET http://localhost:8000/api/auth/csrf/} y cópielo.
+  \item Cree una solicitud \path{POST} a \url{http://localhost:8000/api/auth/logout/}.
+  \item En \textbf{Headers} agregue \path{Content-Type = application/json} y \path{X-CSRFToken = token actual}.
+  \item En \textbf{Body $>$ raw $>$ JSON} escriba \texttt{\{\}} y pulse \textbf{Send}.
+\end{enumerate}
+
+El logout correcto responde status \textbf{200}. Si responde 401 porque la sesión ya había expirado, puede continuar con el nuevo login.
+
+Para iniciar la nueva sesión:
+
+\begin{enumerate}
+  \item Ejecute \path{GET http://localhost:8000/api/auth/csrf/} y copie el token recibido.
+  \item Cree una solicitud \textbf{POST} a \url{http://localhost:8000/api/auth/login/}.
+  \item En \textbf{Headers} agregue \path{Content-Type = application/json} y \path{X-CSRFToken = token que acaba de copiar}.
+  \item En \textbf{Body $>$ raw $>$ JSON} escriba:
+\end{enumerate}
+
+\begin{lstlisting}
+{
+  "username": "<USUARIO>",
+  "password": "<CONTRASENA>"
+}
+\end{lstlisting}
+
+Reemplace \path{<USUARIO>}, pulse \textbf{Send} y confirme status \textbf{200}. Después ejecute de nuevo \path{GET http://localhost:8000/api/auth/csrf/} y copie el token nuevo que usará en las demás solicitudes.
+
+Los usuarios disponibles son \path{administrador}, \path{planificador}, \path{supervisor}, \path{externo}, \path{auditor} y \path{superadministrador}. En los ejemplos, reemplace \path{<CONTRASENA>} por la contraseña que usó al crearlos.
+
+\subsection{Cómo usar los valores entre signos menor y mayor}
+
+Un texto como \path{<ID_PLAN>} es un marcador. Debe reemplazarlo por el número real que aparece en la respuesta de Postman. Por ejemplo, si un plan devuelve \path{"id": 7}, esta URL:
+
+\begin{lstlisting}
+http://localhost:8000/api/planes/<ID_PLAN>/
+\end{lstlisting}
+
+se convierte en:
+
+\begin{lstlisting}
+http://localhost:8000/api/planes/7/
+\end{lstlisting}
+
+No envíe los signos \path{< >} literalmente.
+
+Cuando una URL incluya un signo \path{?}, lo que aparece después son parámetros de consulta. Puede pegar la URL completa tal como está escrita; Postman mostrará automáticamente esas parejas en la pestaña \textbf{Params}. No vuelva a agregarlas una segunda vez.
+
+\section{Prueba 1: autenticación, sesión y CSRF}
+
+\subsection{AUTH-01 --- Intentar entrar sin iniciar sesión}
+
+\begin{enumerate}
+  \item Asegúrese de no tener una sesión abierta. Si tiene una, use el logout explicado arriba. Si no puede cerrarla, abra \textbf{Cookies} en Postman, seleccione \path{localhost} y elimine únicamente la cookie \path{sessionid}.
+  \item Cree una solicitud y seleccione el método \textbf{GET}.
+  \item Pegue la URL y pulse \textbf{Send}:
+\end{enumerate}
+
+\begin{lstlisting}
+http://localhost:8000/api/auth/me/
+\end{lstlisting}
+
+No seleccione Body y no agregue filas manuales en \textbf{Headers}.
+
+\esperado{Status \textbf{401}. El JSON debe incluir \path{"code": "not_authenticated"}. Esto comprueba que un recurso protegido no puede consultarse sin sesión.}
+
+\subsection{AUTH-02 --- Comprobar que CSRF es obligatorio}
+
+\begin{enumerate}
+  \item Ejecute \path{GET /api/auth/csrf/} para que Postman reciba la cookie CSRF.
+  \item Cree una solicitud \textbf{POST} con esta URL:
+\end{enumerate}
+
+\begin{lstlisting}
+http://localhost:8000/api/auth/login/
+\end{lstlisting}
+
+En \textbf{Headers} agregue solamente esta fila y omita intencionalmente \path{X-CSRFToken}:
+
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+\textbf{Key} & \textbf{Value} \\
+\midrule
+\path{Content-Type} & \path{application/json} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+En \textbf{Body $>$ raw $>$ JSON} pegue:
+
+\begin{lstlisting}
+{
+  "username": "planificador",
+  "password": "<CONTRASENA>"
+}
+\end{lstlisting}
+
+Pulse \textbf{Send}.
+
+\esperado{Status \textbf{403} y \path{"code": "csrf_failed"}. La sesión no debe iniciarse.}
+
+\subsection{AUTH-03 --- Probar una contraseña incorrecta}
+
+\begin{enumerate}
+  \item Vuelva a ejecutar \path{GET http://localhost:8000/api/auth/csrf/} y copie el token.
+  \item Cree una solicitud \textbf{POST} a \path{/api/auth/login/}.
+  \item En \textbf{Headers} agregue las dos filas siguientes:
+\end{enumerate}
+
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+\textbf{Key} & \textbf{Value} \\
+\midrule
+\path{Content-Type} & \path{application/json} \\
+\path{X-CSRFToken} & El token que acaba de copiar \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+En \textbf{Body $>$ raw $>$ JSON} pegue:
+
+\begin{lstlisting}
+{
+  "username": "planificador",
+  "password": "valor-incorrecto-controlado"
+}
+\end{lstlisting}
+
+\esperado{Status \textbf{401}. El mensaje no debe revelar si falló el nombre de usuario o la contraseña.}
+
+\subsection{AUTH-04 --- Iniciar sesión correctamente}
+
+\begin{enumerate}
+  \item Cree una solicitud \textbf{POST} a \url{http://localhost:8000/api/auth/login/}.
+  \item En \textbf{Headers} agregue \path{Content-Type = application/json} y \path{X-CSRFToken = token obtenido en AUTH-03}.
+  \item En \textbf{Body $>$ raw $>$ JSON} pegue:
+\end{enumerate}
+
+\begin{lstlisting}
+{
+  "username": "planificador",
+  "password": "<CONTRASENA>"
+}
+\end{lstlisting}
+
+Pulse \textbf{Send}.
+
+\esperado{Status \textbf{200}. La respuesta identifica a \path{planificador}, muestra su rol, entidad, permisos y tiempo de expiración. La contraseña y la cookie de sesión no aparecen en el JSON.}
+
+Ahora haga obligatoriamente lo siguiente:
+
+\begin{enumerate}
+  \item Ejecute nuevamente \path{GET http://localhost:8000/api/auth/csrf/}.
+  \item Copie el nuevo \path{csrf_token}. Este será el token que usará en las siguientes solicitudes.
+  \item Ejecute \path{GET http://localhost:8000/api/auth/me/}.
+\end{enumerate}
+
+\esperado{La consulta \path{/me/} devuelve status \textbf{200} e identifica al usuario \path{planificador}.}
+
+\subsection{AUTH-05 --- Renovar la sesión}
+
+\begin{enumerate}
+  \item Cree una solicitud \textbf{POST} a \url{http://localhost:8000/api/auth/refresh/}.
+  \item En \textbf{Headers} agregue \path{Content-Type = application/json} y \path{X-CSRFToken = token obtenido después del login}.
+  \item En \textbf{Body $>$ raw $>$ JSON} escriba \texttt{\{\}}.
+  \item Pulse \textbf{Send}.
+\end{enumerate}
+
+\esperado{Status \textbf{200}. La respuesta indica que la sesión fue renovada y vuelve a informar \path{expira_en_segundos}.}
+
+\subsection{AUTH-06 --- Consultar el dashboard del perfil}
+
+Cree una solicitud \textbf{GET}; no seleccione Body ni agregue filas manuales en \textbf{Headers}. Use esta URL:
+
+\begin{lstlisting}
+http://localhost:8000/api/dashboard/
+\end{lstlisting}
+
+\esperado{Status \textbf{200}. La respuesta contiene \path{alcance}, \path{entidad} y una lista de \path{widgets} permitidos para \path{planificador}.}
+
+\section{Prueba 2: localizar los IDs que se usarán después}
+
+Cambie al usuario \path{superadministrador} siguiendo la sección ``Cómo cambiar de usuario''. Luego cree solicitudes \textbf{GET} para las siguientes URLs. No seleccione Body ni agregue filas manuales en \textbf{Headers}.
+
+\begin{lstlisting}
+http://localhost:8000/api/roles/?search=Usuario%20Externo
+http://localhost:8000/api/roles/?search=Superadministrador
+http://localhost:8000/api/configuracion/entidades/?search=MDI
+http://localhost:8000/api/configuracion/entidades/?search=SNP
+http://localhost:8000/api/configuracion/unidades/?search=UADM
+http://localhost:8000/api/usuarios/?search=planificador
+http://localhost:8000/api/usuarios/?search=supervisor
+http://localhost:8000/api/ejes-pnd/?estado=ACTIVO
+http://localhost:8000/api/ods/?estado=ACTIVO
+http://localhost:8000/api/proyectos/?search=PIR-001
+http://localhost:8000/api/hitos-proyectos/?search=PIR-001
+\end{lstlisting}
+
+En cada respuesta busque el campo \path{id} del registro correcto y anótelo temporalmente:
+
+\begin{itemize}
+  \item ID del rol Usuario Externo;
+  \item ID del rol Superadministrador técnico;
+  \item ID de las entidades MDI y SNP;
+  \item ID de la unidad UADM de MDI;
+  \item ID de los usuarios planificador y supervisor;
+  \item ID del eje EJE-REF-01;
+  \item ID del ODS número 16;
+  \item ID del proyecto PIR-001 y de su hito.
+\end{itemize}
+
+Los registros \path{EJE-REF-01}, \path{PND-REF-01} y ODS 16 son referencias demostrativas y configurables de esta base local; la guía no los presenta como un catálogo oficial completo.
+
+Con el ID del eje PND, ejecute también:
+
+\begin{lstlisting}
+http://localhost:8000/api/objetivos-pnd/?eje=<ID_EJE_PND>&estado=ACTIVO
+\end{lstlisting}
+
+Guarde el ID del objetivo PND con código \path{PND-REF-01}.
+
+\esperado{Todas las solicitudes responden status \textbf{200}. Los IDs pueden ser distintos en cada base, por eso deben copiarse de las respuestas reales.}
+
+\section{Prueba 3: permisos por rol y protección técnica}
+
+SIPeIP usa control de acceso basado en roles, conocido como \textbf{RBAC}. En la práctica, cada rol agrupa permisos concretos y la API vuelve a comprobarlos en cada operación.
+
+\subsection{RBAC-01 --- Consultar el catálogo real de permisos}
+
+Con la sesión de \path{superadministrador}:
+
+\begin{enumerate}
+  \item Cree una solicitud \textbf{GET}.
+  \item Pegue esta URL y pulse \textbf{Send}:
+\end{enumerate}
+
+\begin{lstlisting}
+http://localhost:8000/api/roles/catalogo-permisos/
+\end{lstlisting}
+
+No seleccione Body y no agregue filas manuales en \textbf{Headers}.
+
+\esperado{Status \textbf{200} y una lista llamada \path{permisos}. Esta lista proviene del backend.}
+
+\subsection{RBAC-02 --- Impedir que un administrador modifique el rol técnico}
+
+Cambie al usuario \path{administrador} y obtenga el nuevo token CSRF después del login.
+
+\begin{enumerate}
+  \item Cree una solicitud y seleccione \textbf{PATCH}.
+  \item Use esta URL reemplazando el ID:
+\end{enumerate}
+
+\begin{lstlisting}
+http://localhost:8000/api/roles/<ID_ROL_SUPERADMIN>/
+\end{lstlisting}
+
+En \textbf{Headers} agregue:
+
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+\textbf{Key} & \textbf{Value} \\
+\midrule
+\path{Content-Type} & \path{application/json} \\
+\path{X-CSRFToken} & El token obtenido después del login \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+En \textbf{Body $>$ raw $>$ JSON} pegue:
+
+\begin{lstlisting}
+{
+  "descripcion": "Intento controlado desde Postman"
+}
+\end{lstlisting}
+
+Pulse \textbf{Send}.
+
+\esperado{Status \textbf{403}. El Administrador del Sistema no puede modificar el rol técnico superior.}
+
+\section{Prueba 4: crear, validar, bloquear y eliminar un usuario}
+
+Cambie a \path{superadministrador} y obtenga el token CSRF posterior al login.
+
+\subsection{USR-01 --- Crear un usuario temporal}
+
+\begin{enumerate}
+  \item Cree una solicitud \textbf{POST}.
+  \item Use la URL:
+\end{enumerate}
+
+\begin{lstlisting}
+http://localhost:8000/api/usuarios/
+\end{lstlisting}
+
+En \textbf{Headers} agregue:
+
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+\textbf{Key} & \textbf{Value} \\
+\midrule
+\path{Content-Type} & \path{application/json} \\
+\path{X-CSRFToken} & El token actual \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+En \textbf{Body $>$ raw $>$ JSON} pegue el siguiente contenido después de reemplazar los IDs y elegir una contraseña temporal de al menos ocho caracteres, que no sea común ni se parezca al nombre del usuario:
+
+\begin{lstlisting}
+{
+  "username": "guia.usuario.01",
+  "email": "guia.usuario.01@example.test",
+  "first_name": "Usuario",
+  "last_name": "Guia",
+  "password": "<CONTRASENA_TEMPORAL>",
+  "rol": <ID_ROL_EXTERNO>,
+  "telefono": "0999999999",
+  "entidad": <ID_ENTIDAD_MDI>,
+  "unidad_organizacional": <ID_UNIDAD_UADM>
+}
+\end{lstlisting}
+
+\esperado{Status \textbf{201}. Copie el \path{id} del usuario creado. La respuesta debe mostrar estado ACTIVO, pero no debe devolver la contraseña.}
+
+\subsection{USR-02 --- Comprobar una validación}
+
+\begin{enumerate}
+  \item Cree una solicitud \textbf{PATCH}.
+  \item Use \path{http://localhost:8000/api/usuarios/<ID_USUARIO_CREADO>/}.
+  \item En \textbf{Headers} agregue \path{Content-Type = application/json} y \path{X-CSRFToken = token actual}.
+  \item En \textbf{Body $>$ raw $>$ JSON} pegue:
+\end{enumerate}
+
+\begin{lstlisting}
+{
+  "telefono": "12345"
+}
+\end{lstlisting}
+
+\esperado{Status \textbf{400} y un mensaje en español indicando que el teléfono debe tener diez dígitos y comenzar con 09.}
+
+Sin cambiar la URL ni los headers, reemplace el Body por:
+
+\begin{lstlisting}
+{
+  "telefono": "0987654321"
+}
+\end{lstlisting}
+
+\esperado{Status \textbf{200}. El teléfono queda actualizado.}
+
+\subsection{USR-03 --- Bloquear y volver a activar el usuario}
+
+Primero bloquee el usuario:
+
+\begin{enumerate}
+  \item Seleccione el método \textbf{POST}.
+  \item Use \path{http://localhost:8000/api/usuarios/<ID_USUARIO_CREADO>/bloquear/}.
+  \item En \textbf{Headers} agregue \path{Content-Type = application/json} y \path{X-CSRFToken = token actual}.
+  \item En \textbf{Body $>$ raw $>$ JSON} escriba \texttt{\{\}}.
+  \item Pulse \textbf{Send}.
+\end{enumerate}
+
+\esperado{Status \textbf{200}, estado BLOQUEADO e \path{is_active: false}.}
+
+Después cambie únicamente la URL a:
+
+\begin{lstlisting}
+http://localhost:8000/api/usuarios/<ID_USUARIO_CREADO>/activar/
+\end{lstlisting}
+
+Mantenga el método POST, los dos headers y el Body \texttt{\{\}}.
+
+\esperado{Status \textbf{200}, estado ACTIVO e \path{is_active: true}.}
+
+\subsection{USR-04 --- Eliminar el usuario temporal}
+
+No inicie sesión con ese usuario ni lo asigne a un plan antes de esta prueba.
+
+\begin{enumerate}
+  \item Cree una solicitud \textbf{DELETE}.
+  \item Use \path{http://localhost:8000/api/usuarios/<ID_USUARIO_CREADO>/}.
+  \item En \textbf{Headers} agregue \path{Content-Type = application/json} y \path{X-CSRFToken = token actual}.
+  \item No agregue Body.
+  \item Pulse \textbf{Send}.
+\end{enumerate}
+
+\esperado{Status \textbf{204}. Si el usuario adquirió relaciones trazables, la API debe responder 409 y conservarlo.}
+
+\section{Prueba 5: comprobar que un Usuario Externo solo ve su institución}
+
+Cambie al usuario \path{externo}.
+
+\subsection{SCOPE-01 --- Listar entidades visibles}
+
+\begin{enumerate}
+  \item Cree una solicitud \textbf{GET}.
+  \item Use \url{http://localhost:8000/api/configuracion/entidades/}.
+  \item No seleccione Body y no agregue filas manuales en \textbf{Headers}.
+  \item Pulse \textbf{Send}.
+\end{enumerate}
+
+\esperado{Status \textbf{200}. La respuesta contiene MDI y no contiene SNP.}
+
+\subsection{SCOPE-02 --- Intentar consultar directamente la entidad SNP}
+
+Use una solicitud \textbf{GET} con:
+
+\begin{lstlisting}
+http://localhost:8000/api/configuracion/entidades/<ID_ENTIDAD_SNP>/
+\end{lstlisting}
+
+No seleccione Body y no agregue filas manuales en \textbf{Headers}.
+
+\esperado{Status \textbf{404}. Aunque SNP exista, la API usa esta respuesta para no revelar registros de otra institución al Usuario Externo.}
+
+\subsection{SCOPE-03 --- Intentar crear una entidad sin permiso}
+
+\begin{enumerate}
+  \item Cree una solicitud \textbf{POST} a \url{http://localhost:8000/api/configuracion/entidades/}.
+  \item En \textbf{Headers} agregue \path{Content-Type = application/json} y \path{X-CSRFToken = token actual}.
+  \item En \textbf{Body $>$ raw $>$ JSON} pegue:
+\end{enumerate}
+
+\begin{lstlisting}
+{
+  "codigo_oficial": "GUIA-NO-AUT",
+  "nombre": "Entidad que no debe crearse",
+  "subsector": "Prueba controlada",
+  "nivel_gobierno": "Nacional"
+}
+\end{lstlisting}
+
+\esperado{Status \textbf{403}. El Usuario Externo puede consultar su configuración, pero no administrarla.}
+
+\section{Prueba 6: objetivo estratégico y alineación PND/ODS}
+
+En esta sección, \textbf{PND} significa Plan Nacional de Desarrollo y \textbf{ODS} significa Objetivos de Desarrollo Sostenible.
+
+Cambie al usuario \path{planificador}.
+
+\subsection{OBJ-01 --- Crear un objetivo estratégico de MDI}
+
+\begin{enumerate}
+  \item Cree una solicitud \textbf{POST} a \url{http://localhost:8000/api/objetivos-estrategicos/}.
+  \item En \textbf{Headers} agregue \path{Content-Type = application/json} y \path{X-CSRFToken = token actual}.
+  \item En \textbf{Body $>$ raw $>$ JSON} pegue:
+\end{enumerate}
+
+\begin{lstlisting}
+{
+  "entidad": <ID_ENTIDAD_MDI>,
+  "codigo": "OEI-GUIA-01",
+  "nombre": "Fortalecer la gestion institucional",
+  "descripcion": "Objetivo creado durante la guia de pruebas."
+}
+\end{lstlisting}
+
+\esperado{Status \textbf{201}. Copie el ID del objetivo. Debe aparecer en estado ACTIVO.}
+
+Si el código \path{OEI-GUIA-01} ya existe porque repitió la guía, use \path{OEI-GUIA-02}.
+
+\subsection{ALI-01 --- Relacionar el objetivo con PND y ODS}
+
+\begin{enumerate}
+  \item Cree una solicitud \textbf{POST} a \url{http://localhost:8000/api/alineaciones/}.
+  \item En \textbf{Headers} agregue \path{Content-Type = application/json} y \path{X-CSRFToken = token actual}.
+  \item En \textbf{Body $>$ raw $>$ JSON} pegue, reemplazando los tres IDs:
+\end{enumerate}
+
+\begin{lstlisting}
+{
+  "objetivo_estrategico": <ID_OBJETIVO_CREADO>,
+  "objetivo_pnd": <ID_OBJETIVO_PND>,
+  "ods": <ID_ODS_16>,
+  "justificacion": "La mejora institucional contribuye al objetivo PND y al ODS seleccionados."
+}
+\end{lstlisting}
+
+\esperado{Status \textbf{201}, estado BORRADOR y \path{usuario_creador_detalle.username: "planificador"}. Copie el ID de la alineación.}
+
+\subsection{ALI-02 --- Comprobar quién puede validar la alineación}
+
+Como \path{planificador}:
+
+\begin{enumerate}
+  \item Cree una solicitud \textbf{POST} a \path{http://localhost:8000/api/alineaciones/<ID_ALINEACION>/validar/}.
+  \item En \textbf{Headers} agregue \path{Content-Type = application/json} y \path{X-CSRFToken = token actual}.
+  \item En \textbf{Body $>$ raw $>$ JSON} escriba \texttt{\{\}}.
+  \item Pulse \textbf{Send}.
+\end{enumerate}
+
+\esperado{Status \textbf{403}. Crear una alineación no significa poder validarla.}
+
+Cambie a \path{superadministrador}, obtenga su token CSRF posterior al login y repita exactamente la misma solicitud con el nuevo token.
+
+\esperado{Status \textbf{200}, estado VALIDADA y \path{usuario_validador_detalle.username: "superadministrador"}. Si vuelve a pulsar Send, debe obtener 409 porque una alineación validada ya no está en borrador.}
+
+\section{Prueba 7: flujo completo Plan, Meta, Indicador y Avance}
+
+Cambie al usuario \path{planificador}. Use el objetivo estratégico creado en OBJ-01.
+
+\subsection{PLAN-01 --- Crear un plan}
+
+\begin{enumerate}
+  \item Cree una solicitud \textbf{POST} a \url{http://localhost:8000/api/planes/}.
+  \item En \textbf{Headers} agregue \path{Content-Type = application/json} y \path{X-CSRFToken = token actual}.
+  \item En \textbf{Body $>$ raw $>$ JSON} pegue:
+\end{enumerate}
+
+\begin{lstlisting}
+{
+  "nombre": "Plan Postman GUIA-01",
+  "descripcion": "Plan creado para comprobar el flujo completo.",
+  "entidad": <ID_ENTIDAD_MDI>,
+  "periodo_inicio": "2026-01-01",
+  "periodo_fin": "2026-12-31",
+  "responsable": <ID_USUARIO_PLANIFICADOR>
+}
+\end{lstlisting}
+
+\esperado{Status \textbf{201} y estado BORRADOR. Copie el ID del plan.}
+
+Si el nombre ya existe, cambie \path{GUIA-01} por otro número.
+
+\subsection{PLAN-02 --- Probar la validación de fechas}
+
+\begin{enumerate}
+  \item Cree una solicitud \textbf{PATCH} a \path{http://localhost:8000/api/planes/<ID_PLAN>/}.
+  \item En \textbf{Headers} agregue \path{Content-Type = application/json} y \path{X-CSRFToken = token actual}.
+  \item En \textbf{Body $>$ raw $>$ JSON} pegue:
+\end{enumerate}
+
+\begin{lstlisting}
+{
+  "periodo_inicio": "2026-12-31",
+  "periodo_fin": "2026-01-01"
+}
+\end{lstlisting}
+
+\esperado{Status \textbf{400}. La fecha final no puede ser anterior a la inicial.}
+
+\subsection{META-01 --- Crear una meta vinculada al objetivo}
+
+\begin{enumerate}
+  \item Cree una solicitud \textbf{POST} a \url{http://localhost:8000/api/metas/}.
+  \item En \textbf{Headers} agregue \path{Content-Type = application/json} y \path{X-CSRFToken = token actual}.
+  \item En \textbf{Body $>$ raw $>$ JSON} pegue:
+\end{enumerate}
+
+\begin{lstlisting}
+{
+  "plan": <ID_PLAN>,
+  "objetivo_estrategico": <ID_OBJETIVO_CREADO>,
+  "nombre": "Mejorar procesos institucionales GUIA-01",
+  "descripcion": "Meta de la guia de pruebas.",
+  "resultado_esperado": "Obtener una mejora medible durante 2026.",
+  "fecha_inicio": "2026-01-01",
+  "fecha_fin": "2026-12-31"
+}
+\end{lstlisting}
+
+\esperado{Status \textbf{201}, estado BORRADOR y detalle del objetivo estratégico relacionado. Copie el ID de la meta.}
+
+\subsection{META-02 --- Activar la meta}
+
+\begin{enumerate}
+  \item Cree una solicitud \textbf{POST} a \path{http://localhost:8000/api/metas/<ID_META>/activar/}.
+  \item En \textbf{Headers} agregue \path{Content-Type = application/json} y \path{X-CSRFToken = token actual}.
+  \item En \textbf{Body $>$ raw $>$ JSON} escriba \texttt{\{\}}.
+  \item Pulse \textbf{Send}.
+\end{enumerate}
+
+\esperado{Status \textbf{200}, estado ACTIVA y \path{activa: true}.}
+
+\subsection{IND-01 --- Crear un indicador}
+
+\begin{enumerate}
+  \item Cree una solicitud \textbf{POST} a \url{http://localhost:8000/api/indicadores/}.
+  \item En \textbf{Headers} agregue \path{Content-Type = application/json} y \path{X-CSRFToken = token actual}.
+  \item En \textbf{Body $>$ raw $>$ JSON} pegue:
+\end{enumerate}
+
+\begin{lstlisting}
+{
+  "meta": <ID_META>,
+  "nombre": "Porcentaje de procesos mejorados GUIA-01",
+  "descripcion": "Indicador de la meta creada en Postman.",
+  "unidad_medida": "Porcentaje",
+  "valor_base": "0.00",
+  "valor_meta": "100.00",
+  "frecuencia": "MENSUAL"
+}
+\end{lstlisting}
+
+\esperado{Status \textbf{201}. Copie el ID del indicador. Su \path{valor_actual} debe ser 0.00.}
+
+\subsection{AVA-01 --- Rechazar un avance negativo}
+
+\begin{enumerate}
+  \item Cree una solicitud \textbf{POST} a \path{http://localhost:8000/api/indicadores/<ID_INDICADOR>/registrar-avance/}.
+  \item En \textbf{Headers} agregue \path{Content-Type = application/json} y \path{X-CSRFToken = token actual}.
+  \item En \textbf{Body $>$ raw $>$ JSON} pegue:
+\end{enumerate}
+
+\begin{lstlisting}
+{
+  "fecha_registro": "2026-07-15",
+  "valor": "-1.00",
+  "observacion": "Valor negativo enviado intencionalmente."
+}
+\end{lstlisting}
+
+\esperado{Status \textbf{400}. No debe crearse el avance.}
+
+\subsection{AVA-02 --- Registrar un avance correcto}
+
+Mantenga el método, URL y headers anteriores. Cambie el Body por:
+
+\begin{lstlisting}
+{
+  "fecha_registro": "2026-07-15",
+  "valor": "25.00",
+  "observacion": "Primer avance registrado desde Postman."
+}
+\end{lstlisting}
+
+\esperado{Status \textbf{201}. Compruebe \path{registrado_por_detalle.username: "planificador"}; el registrador no se elige desde el Body.}
+
+Ahora cree una solicitud \textbf{GET}. No seleccione Body ni agregue filas manuales en \textbf{Headers}. Use esta URL:
+
+\begin{lstlisting}
+http://localhost:8000/api/indicadores/<ID_INDICADOR>/
+\end{lstlisting}
+
+\esperado{Status \textbf{200} y \path{valor_actual: "25.00"}. Esto comprueba que el avance actualizó el indicador.}
+
+\subsection{META-03 --- Intentar eliminar una meta que ya tiene indicador}
+
+El perfil Planificador no tiene permiso de eliminación. Para probar específicamente la protección de relaciones y obtener el conflicto 409, cambie temporalmente a \path{superadministrador}, haga el login y copie su nuevo token CSRF.
+
+\begin{enumerate}
+  \item Cree una solicitud \textbf{DELETE} a \path{http://localhost:8000/api/metas/<ID_META>/}.
+  \item En \textbf{Headers} agregue \path{Content-Type = application/json} y \path{X-CSRFToken = token actual}.
+  \item No agregue Body.
+  \item Pulse \textbf{Send}.
+\end{enumerate}
+
+\esperado{Status \textbf{409}. La meta y el indicador se conservan porque ya existe información relacionada.}
+
+\subsection{PLAN-03 --- Enviar el plan a revisión}
+
+Vuelva a cambiar al usuario \path{planificador} y copie el token CSRF obtenido después de ese login.
+
+\begin{enumerate}
+  \item Cree una solicitud \textbf{POST} a \path{http://localhost:8000/api/planes/<ID_PLAN>/enviar-a-revision/}.
+  \item En \textbf{Headers} agregue \path{Content-Type = application/json} y \path{X-CSRFToken = token actual}.
+  \item En \textbf{Body $>$ raw $>$ JSON} pegue:
+\end{enumerate}
+
+\begin{lstlisting}
+{
+  "observacion": "Plan enviado a revision desde Postman."
+}
+\end{lstlisting}
+
+\esperado{Status \textbf{200} y estado EN\_REVISION.}
+
+Pulse \textbf{Send} una segunda vez sin cambiar nada.
+
+\esperado{Status \textbf{409}, porque un plan que ya está en revisión no puede enviarse nuevamente.}
+
+Finalmente cambie la URL a \path{http://localhost:8000/api/planes/<ID_PLAN>/aprobar/}, mantenga POST, los dos headers y use Body \texttt{\{\}}.
+
+\esperado{Status \textbf{403}. El Planificador puede enviar, pero no aprobar.}
+
+\section{Prueba 8: revisión y aprobación con Supervisor}
+
+Cambie al usuario \path{supervisor}. Esta prueba usa el plan de SNP que inicialmente se encuentra en EN\_REVISION.
+
+\begin{enumerate}
+  \item Cree una solicitud \textbf{GET} a:
+\end{enumerate}
+
+\begin{lstlisting}
+http://localhost:8000/api/planes/?search=Plan%20Institucional%202026-2029
+\end{lstlisting}
+
+En la respuesta elija el plan cuya entidad sea SNP y cuyo estado sea EN\_REVISION. Copie su ID.
+
+Para iniciar la revisión:
+
+\begin{enumerate}
+  \item Cree una solicitud \textbf{POST} a \path{http://localhost:8000/api/planes/<ID_PLAN_SNP>/revisar/}.
+  \item En \textbf{Headers} agregue \path{Content-Type = application/json} y \path{X-CSRFToken = token actual}.
+  \item En \textbf{Body $>$ raw $>$ JSON} escriba \texttt{\{\}}.
+  \item Pulse \textbf{Send}.
+\end{enumerate}
+
+\esperado{Status \textbf{200} y estado EN\_REVISION\_INICIADA.}
+
+Para aprobarlo, cambie únicamente la URL a:
+
+\begin{lstlisting}
+http://localhost:8000/api/planes/<ID_PLAN_SNP>/aprobar/
+\end{lstlisting}
+
+Mantenga POST, los dos headers y el Body \texttt{\{\}}.
+
+\esperado{Status \textbf{200} y estado APROBADO.}
+
+Para comprobar el historial cree una solicitud \textbf{GET}. No seleccione Body ni agregue filas manuales en \textbf{Headers}. Use esta URL:
+
+\begin{lstlisting}
+http://localhost:8000/api/planes/<ID_PLAN_SNP>/historial/
+\end{lstlisting}
+
+\esperado{Aparecen las acciones de iniciar revisión y aprobar, realizadas por \path{supervisor}.}
+
+Si el plan ya estaba aprobado antes de empezar, no fuerce su estado con PATCH. Use otro plan de SNP que haya llegado correctamente a EN\_REVISION o deje esta prueba anotada como ya ejecutada.
+
+\section{Prueba 9: seguimiento de un proyecto}
+
+Cambie al usuario \path{planificador}. Use los IDs de PIR-001 y su hito que obtuvo en la Prueba 2.
+
+Primero consulte el proyecto mediante una solicitud \textbf{GET}. No seleccione Body ni agregue filas manuales en \textbf{Headers}:
+
+\begin{lstlisting}
+http://localhost:8000/api/proyectos/?search=PIR-001
+\end{lstlisting}
+
+\esperado{Status \textbf{200}. El proyecto aparece en estado EN\_EJECUCION.}
+
+Si PIR-001 ya no está EN\_EJECUCION porque otra prueba lo suspendió, finalizó o archivó, no continúe con ese registro: utilice otro proyecto en ejecución o vuelva a preparar los datos demostrativos locales.
+
+Para registrar un seguimiento:
+
+\begin{enumerate}
+  \item Cree una solicitud \textbf{POST} a \path{http://localhost:8000/api/proyectos/<ID_PIR_001>/registrar-seguimiento/}.
+  \item En \textbf{Headers} agregue \path{Content-Type = application/json} y \path{X-CSRFToken = token actual}.
+  \item En \textbf{Body $>$ raw $>$ JSON} pegue:
+\end{enumerate}
+
+\begin{lstlisting}
+{
+  "hito": <ID_HITO_PIR_001>,
+  "fecha_registro": "2026-07-20",
+  "avance_fisico": "40.00",
+  "avance_financiero": "37.00",
+  "observacion": "Corte registrado desde Postman."
+}
+\end{lstlisting}
+
+\esperado{Status \textbf{201}. El usuario registrador debe proceder de la sesión. Al consultar nuevamente el proyecto, sus avances consolidados deben ser 40.00 y 37.00.}
+
+Pulse \textbf{Send} nuevamente con la misma fecha.
+
+\esperado{Status \textbf{400}, porque solo puede existir un seguimiento por proyecto y fecha.}
+
+Si el 20 de julio ya está registrado, use otra fecha de 2026 que esté dentro del periodo del proyecto, no sea futura y no se haya utilizado antes.
+
+\section{Prueba 10: reportes y protección entre instituciones}
+
+Cambie al usuario \path{externo}.
+
+\subsection{REP-01 --- Consultar los reportes disponibles}
+
+Cree una solicitud \textbf{GET}. No seleccione Body ni agregue filas manuales en \textbf{Headers}. Use esta URL:
+
+\begin{lstlisting}
+http://localhost:8000/api/reportes/catalogo/
+\end{lstlisting}
+
+\esperado{Status \textbf{200}. Solo aparecen los reportes permitidos para el Usuario Externo.}
+
+\subsection{REP-02 --- Ver planes aprobados de su institución}
+
+Cree una solicitud \textbf{GET}. No seleccione Body ni agregue filas manuales en \textbf{Headers}. Use esta URL:
+
+\begin{lstlisting}
+http://localhost:8000/api/reportes/generar/planes/?estado=APROBADO&limite=50
+\end{lstlisting}
+
+\esperado{Status \textbf{200}. Los resultados pertenecen a MDI y no incluyen planes de SNP.}
+
+\subsection{REP-03 --- Intentar ampliar el alcance mediante un parámetro}
+
+Use una solicitud \textbf{GET} a:
+
+\begin{lstlisting}
+http://localhost:8000/api/reportes/generar/planes/?entidad=<ID_ENTIDAD_SNP>&limite=50
+\end{lstlisting}
+
+\esperado{Status \textbf{200}, \path{total: 0} y resultados vacíos. Escribir el ID de SNP en la URL no concede acceso a SNP.}
+
+\subsection{REP-04 --- Descargar un reporte}
+
+Use una solicitud \textbf{GET} a:
+
+\begin{lstlisting}
+http://localhost:8000/api/reportes/exportar/planes/csv/?entidad=<ID_ENTIDAD_MDI>&limite=50
+\end{lstlisting}
+
+Para guardar el archivo, abra la flecha situada junto al botón \textbf{Send}, seleccione \textbf{Send and Download} y elija la ubicación. También puede usar \textbf{Send} y después \textbf{Save Response}.
+
+\esperado{Status \textbf{200} y descarga de un archivo CSV con datos autorizados de MDI.}
+
+Para probar los otros formatos, cambie únicamente \path{csv} por \path{json}, \path{xlsx} o \path{pdf}.
+
+\section{Prueba 11: auditoría y perfil de solo lectura}
+
+Cambie al usuario \path{auditor}.
+
+\subsection{AUD-01 --- Consultar eventos de autenticación}
+
+Cree una solicitud \textbf{GET}. No seleccione Body ni agregue filas manuales en \textbf{Headers}. Use esta URL:
+
+\begin{lstlisting}
+http://localhost:8000/api/auditoria/eventos/?modulo=autenticacion&ordering=-fecha_hora
+\end{lstlisting}
+
+\esperado{Status \textbf{200}. Aparecen eventos de autenticación que están dentro del alcance SNP. Ningún evento debe contener contraseñas, cookies o tokens.}
+
+\subsection{AUD-02 --- Comprobar que el Auditor no puede crear planes}
+
+\begin{enumerate}
+  \item Cree una solicitud \textbf{POST} a \url{http://localhost:8000/api/planes/}.
+  \item En \textbf{Headers} agregue \path{Content-Type = application/json} y \path{X-CSRFToken = token actual}.
+  \item En \textbf{Body $>$ raw $>$ JSON} pegue:
+\end{enumerate}
+
+\begin{lstlisting}
+{
+  "nombre": "Plan que no debe crear el auditor",
+  "descripcion": "Intento controlado.",
+  "entidad": <ID_ENTIDAD_SNP>,
+  "periodo_inicio": "2026-01-01",
+  "periodo_fin": "2026-12-31",
+  "responsable": <ID_USUARIO_SUPERVISOR>
+}
+\end{lstlisting}
+
+\esperado{Status \textbf{403}. El Auditor puede leer información autorizada, pero no crear ni modificar datos.}
+
+\section{Qué significa cada status que aparecerá}
+
+\begin{center}
+\begin{tabularx}{\textwidth}{p{1.7cm} Y}
+\toprule
+\textbf{Status} & \textbf{Interpretación sencilla} \\
+\midrule
+200 & La consulta o acción terminó correctamente. \\
+201 & Se creó un registro correctamente. \\
+204 & Se eliminó el registro; es normal que la respuesta no tenga Body. \\
+400 & El JSON contiene un dato inválido o no cumple una regla del negocio. Lea el mensaje del campo. \\
+401 & No existe una sesión válida. Debe iniciar sesión. \\
+403 & El usuario no tiene permiso o el token CSRF es incorrecto. Revise el campo \path{code}. \\
+404 & El ID no existe o el registro está fuera del alcance institucional del usuario. \\
+409 & La acción entra en conflicto con el estado actual o con relaciones que deben conservarse. \\
+429 & Se hicieron demasiados intentos de login; debe esperar antes de repetir. \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\section{Si una solicitud no responde como esperaba}
+
+\begin{itemize}
+  \item Si recibe 403 con \path{csrf_failed}, ejecute otra vez \path{GET /api/auth/csrf/}, copie el token nuevo y reemplace \path{X-CSRFToken}.
+  \item Si recibe 401 después de un login correcto, revise que todas las URLs utilicen \path{localhost} y que Postman conserve la cookie \path{sessionid}.
+  \item Si recibe 404 con un ID que sabe que existe, compruebe si el usuario pertenece a otra institución.
+  \item Si recibe 400, confirme que reemplazó todos los marcadores \path{<ID_...>} por números reales y que seleccionó \textbf{Body $>$ raw $>$ JSON}.
+  \item Si recibe 409 al repetir una prueba, consulte primero el estado actual. La primera solicitud probablemente ya cambió el registro.
+  \item Si un código o nombre \path{GUIA-01} ya existe, cambie el sufijo a \path{GUIA-02} en todos los registros relacionados de esa nueva ejecución.
+\end{itemize}
+
+\vfill
+\begin{center}
+\textcolor{AzulSipeip}{\rule{0.65\textwidth}{0.5pt}}\\
+\small Fin de la guía práctica
+\end{center}
+
+\end{document}

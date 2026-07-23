@@ -12,13 +12,13 @@ from apps.auditoria.services import (
     serializar_instancia,
 )
 from apps.configuracion.scope import (
-    filtrar_queryset_por_entidad,
     obtener_alcance_usuario,
 )
 from apps.configuracion.models import EntidadInstitucional
 from apps.roles.permissions import HasSipeipPermission
 
 from .models import HistorialEstadoPlan, Plan
+from .scope import filtrar_queryset_por_alcance_plan
 from .serializers import (
     HistorialEstadoPlanSerializer,
     PlanSerializer,
@@ -77,8 +77,9 @@ class PlanViewSet(AuditoriaModelViewSetMixin, viewsets.ModelViewSet):
     audit_funcionalidad = "planes institucionales"
 
     def get_queryset(self):
-        queryset = filtrar_queryset_por_entidad(
-            super().get_queryset(), self.request.user, "entidad"
+        queryset = filtrar_queryset_por_alcance_plan(
+            super().get_queryset(),
+            self.request.user,
         )
         if obtener_alcance_usuario(self.request.user) in {
             "ENTIDAD",

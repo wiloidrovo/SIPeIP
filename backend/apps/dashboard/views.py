@@ -11,12 +11,13 @@ from apps.configuracion.scope import (
     filtrar_queryset_por_entidad,
     obtener_alcance_usuario,
 )
+from apps.planes.scope import filtrar_queryset_por_alcance_plan
 from apps.reportes.datasets import DATASETS
 
 
 def _planes_visibles(usuario):
     Plan = apps.get_model("planes", "Plan")
-    queryset = filtrar_queryset_por_entidad(Plan.objects.all(), usuario, "entidad")
+    queryset = filtrar_queryset_por_alcance_plan(Plan.objects.all(), usuario)
     if obtener_alcance_usuario(usuario) in {"ENTIDAD", "PROPIO_ASIGNADO"}:
         queryset = queryset.filter(Q(creado_por=usuario) | Q(responsable=usuario))
     return queryset.distinct()

@@ -1,6 +1,10 @@
 import { useAuth } from "../../auth/AuthContext";
 import type { SessionUser } from "../../auth/types";
 import { ResourcePage, optionsFrom } from "../../components/ResourcePage";
+import type {
+  SelectFilterContext,
+  SelectOption,
+} from "../../components/ResourcePage";
 import type { ApiRecord } from "../../services/api";
 
 const protectedRoleCode = "superadministrador_tecnico";
@@ -35,6 +39,16 @@ function accountIsProtected(record: ApiRecord, user: SessionUser | null) {
   return record.is_staff === true || String(role?.codigo ?? "") === protectedRoleCode;
 }
 
+function unitMatchesSelectedEntity(
+  option: SelectOption,
+  context: SelectFilterContext,
+) {
+  const entityId = String(context.values.entidad ?? "");
+  return Boolean(
+    entityId && String(option.record?.entidad ?? "") === entityId,
+  );
+}
+
 export function UsuariosPage() {
   const { user } = useAuth();
   const fields = [
@@ -54,6 +68,7 @@ export function UsuariosPage() {
         (item) => String(item.nombre),
         (item) => roleIsUnavailable(item, user),
       ),
+      emptyOptionsMessage: "No hay roles que esta cuenta pueda asignar.",
     },
     {
       name: "entidad",
@@ -63,7 +78,9 @@ export function UsuariosPage() {
       loadOptions: optionsFrom(
         "/configuracion/entidades/",
         (item) => `${String(item.codigo_oficial)} · ${String(item.nombre)}`,
+        (item) => String(item.estado) !== "ACTIVA",
       ),
+      emptyOptionsMessage: "No hay entidades activas dentro de su ámbito.",
     },
     {
       name: "unidad_organizacional",
@@ -73,7 +90,13 @@ export function UsuariosPage() {
       loadOptions: optionsFrom(
         "/configuracion/unidades/",
         (item) => String(item.nombre),
+        (item) => String(item.estado) !== "ACTIVA",
       ),
+      filterOptions: unitMatchesSelectedEntity,
+      dependsOn: ["entidad"],
+      emptyOptionsMessage: (context: SelectFilterContext) => context.values.entidad
+        ? "La entidad seleccionada no tiene unidades activas."
+        : "Seleccione primero una entidad.",
     },
   ];
 

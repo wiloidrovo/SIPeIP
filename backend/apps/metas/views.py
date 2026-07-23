@@ -14,11 +14,11 @@ from apps.auditoria.services import (
     serializar_instancia,
 )
 from apps.configuracion.scope import (
-    filtrar_queryset_por_entidad,
     obtener_alcance_usuario,
 )
 from apps.objetivos.models import EstadoCatalogo
 from apps.planes.models import Plan
+from apps.planes.scope import filtrar_queryset_por_alcance_plan
 from apps.roles.permissions import HasSipeipPermission
 
 from .models import AvanceIndicador, Indicador, Meta
@@ -83,8 +83,10 @@ class MetaViewSet(AuditoriaModelViewSetMixin, viewsets.ModelViewSet):
     audit_funcionalidad = "metas institucionales"
 
     def get_queryset(self):
-        queryset = filtrar_queryset_por_entidad(
-            super().get_queryset(), self.request.user, "plan__entidad"
+        queryset = filtrar_queryset_por_alcance_plan(
+            super().get_queryset(),
+            self.request.user,
+            "plan",
         )
         queryset = _filtrar_propios(queryset, self.request.user, "plan")
         filtros_numericos = {
@@ -374,8 +376,10 @@ class IndicadorViewSet(AuditoriaModelViewSetMixin, viewsets.ModelViewSet):
     audit_funcionalidad = "indicadores"
 
     def get_queryset(self):
-        queryset = filtrar_queryset_por_entidad(
-            super().get_queryset(), self.request.user, "meta__plan__entidad"
+        queryset = filtrar_queryset_por_alcance_plan(
+            super().get_queryset(),
+            self.request.user,
+            "meta__plan",
         )
         return _filtrar_propios(
             queryset, self.request.user, "meta__plan"
@@ -718,10 +722,10 @@ class AvanceIndicadorViewSet(viewsets.ReadOnlyModelViewSet):
     ordering = ["-fecha_registro", "-fecha_creacion"]
 
     def get_queryset(self):
-        queryset = filtrar_queryset_por_entidad(
+        queryset = filtrar_queryset_por_alcance_plan(
             super().get_queryset(),
             self.request.user,
-            "indicador__meta__plan__entidad",
+            "indicador__meta__plan",
         )
         return _filtrar_propios(
             queryset, self.request.user, "indicador__meta__plan"

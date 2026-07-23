@@ -18,7 +18,15 @@ const frequencies = ["MENSUAL", "TRIMESTRAL", "SEMESTRAL", "ANUAL"].map((value) 
 
 export function IndicadoresPage() {
   return <ResourcePage eyebrow="Seguimiento" title="Indicadores" description="Configure métricas, registre avances y valide los indicadores institucionales." apiPath="/indicadores/" viewPermission="indicadores.ver" createPermission="indicadores.crear" editPermission="indicadores.editar" deletePermission="indicadores.eliminar" initialValues={{ valor_base: "0.00", frecuencia: "TRIMESTRAL" }} fields={[
-    { name: "meta", label: "Meta", type: "select", required: true, loadOptions: metas },
+    {
+      name: "meta",
+      label: "Meta",
+      type: "select",
+      required: true,
+      loadOptions: metas,
+      helpText: "La meta debe estar activa y pertenecer a un plan editable.",
+      emptyOptionsMessage: "No hay metas disponibles para registrar indicadores.",
+    },
     { name: "nombre", label: "Nombre", required: true }, { name: "descripcion", label: "Descripción", type: "textarea" },
     { name: "unidad_medida", label: "Unidad de medida", required: true },
     { name: "valor_base", label: "Valor base", type: "number", min: 0, step: "0.01", required: true },
