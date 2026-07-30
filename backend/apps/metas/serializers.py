@@ -10,6 +10,7 @@ from apps.objetivos.models import EstadoCatalogo, ObjetivoEstrategico
 from apps.planes.models import Plan
 
 from .models import AvanceIndicador, Indicador, Meta
+from .services import calcular_seguimiento_indicador, calcular_seguimiento_meta
 
 
 def _validar_alcance_plan(serializer, plan):
@@ -51,6 +52,10 @@ class MetaSerializer(serializers.ModelSerializer):
     plan_detalle = serializers.SerializerMethodField()
     objetivo_estrategico_detalle = serializers.SerializerMethodField()
     indicadores_count = serializers.SerializerMethodField()
+    progreso = serializers.SerializerMethodField()
+    estado_seguimiento = serializers.SerializerMethodField()
+    etiqueta_estado_seguimiento = serializers.SerializerMethodField()
+    proxima_medicion = serializers.SerializerMethodField()
 
     class Meta:
         model = Meta
@@ -68,6 +73,10 @@ class MetaSerializer(serializers.ModelSerializer):
             "estado",
             "activa",
             "indicadores_count",
+            "progreso",
+            "estado_seguimiento",
+            "etiqueta_estado_seguimiento",
+            "proxima_medicion",
             "fecha_creacion",
             "fecha_actualizacion",
         ]
@@ -78,6 +87,10 @@ class MetaSerializer(serializers.ModelSerializer):
             "estado",
             "activa",
             "indicadores_count",
+            "progreso",
+            "estado_seguimiento",
+            "etiqueta_estado_seguimiento",
+            "proxima_medicion",
             "fecha_creacion",
             "fecha_actualizacion",
         ]
@@ -110,6 +123,23 @@ class MetaSerializer(serializers.ModelSerializer):
                 "codigo_oficial": objetivo.entidad.codigo_oficial,
                 "nombre": objetivo.entidad.nombre,
             },
+            "alineaciones": [
+                {
+                    "id": alineacion.pk,
+                    "estado": alineacion.estado,
+                    "objetivo_pnd": {
+                        "id": alineacion.objetivo_pnd_id,
+                        "codigo": alineacion.objetivo_pnd.codigo,
+                        "nombre": alineacion.objetivo_pnd.nombre,
+                    },
+                    "ods": {
+                        "id": alineacion.ods_id,
+                        "numero": alineacion.ods.numero,
+                        "nombre": alineacion.ods.nombre,
+                    },
+                }
+                for alineacion in objetivo.alineaciones.all()
+            ],
         }
 
     def get_indicadores_count(self, obj):
@@ -118,6 +148,25 @@ class MetaSerializer(serializers.ModelSerializer):
         if hasattr(obj, "indicadores_count_anotado"):
             return obj.indicadores_count_anotado
         return obj.indicadores.count()
+
+    def _seguimiento(self, obj):
+        cache = getattr(obj, "_seguimiento_serializer", None)
+        if cache is None:
+            cache = calcular_seguimiento_meta(obj)
+            obj._seguimiento_serializer = cache
+        return cache
+
+    def get_progreso(self, obj):
+        return float(self._seguimiento(obj)["progreso"])
+
+    def get_estado_seguimiento(self, obj):
+        return self._seguimiento(obj)["estado_seguimiento"]
+
+    def get_etiqueta_estado_seguimiento(self, obj):
+        return self._seguimiento(obj)["etiqueta_estado_seguimiento"]
+
+    def get_proxima_medicion(self, obj):
+        return self._seguimiento(obj)["proxima_medicion"]
 
     def validate_nombre(self, value):
         """Normaliza y valida el nombre de la meta."""
@@ -239,6 +288,23 @@ class MetaSerializer(serializers.ModelSerializer):
                 }
             )
 
+        if plan and fecha_inicio and fecha_inicio < plan.periodo_inicio:
+            raise serializers.ValidationError(
+                {
+                    "fecha_inicio": (
+                        "La meta no puede iniciar antes del periodo del plan."
+                    )
+                }
+            )
+        if plan and fecha_fin and fecha_fin > plan.periodo_fin:
+            raise serializers.ValidationError(
+                {
+                    "fecha_fin": (
+                        "La meta no puede finalizar después del periodo del plan."
+                    )
+                }
+            )
+
         return attrs
 
 
@@ -253,6 +319,13 @@ class IndicadorSerializer(serializers.ModelSerializer):
     meta = serializers.PrimaryKeyRelatedField(queryset=Meta.objects.all())
     meta_detalle = serializers.SerializerMethodField()
     avances_count = serializers.SerializerMethodField()
+    progreso = serializers.SerializerMethodField()
+    avance_esperado = serializers.SerializerMethodField()
+    estado_seguimiento = serializers.SerializerMethodField()
+    etiqueta_estado_seguimiento = serializers.SerializerMethodField()
+    proxima_medicion = serializers.SerializerMethodField()
+    ultimo_avance = serializers.SerializerMethodField()
+    tendencia = serializers.SerializerMethodField()
 
     class Meta:
         model = Indicador
@@ -267,11 +340,20 @@ class IndicadorSerializer(serializers.ModelSerializer):
             "valor_meta",
             "valor_actual",
             "frecuencia",
+            "sentido",
+            "ponderacion",
             "activo",
             "validado",
             "validado_por",
             "fecha_validacion",
             "avances_count",
+            "progreso",
+            "avance_esperado",
+            "estado_seguimiento",
+            "etiqueta_estado_seguimiento",
+            "proxima_medicion",
+            "ultimo_avance",
+            "tendencia",
             "fecha_creacion",
             "fecha_actualizacion",
         ]
@@ -284,6 +366,13 @@ class IndicadorSerializer(serializers.ModelSerializer):
             "validado_por",
             "fecha_validacion",
             "avances_count",
+            "progreso",
+            "avance_esperado",
+            "estado_seguimiento",
+            "etiqueta_estado_seguimiento",
+            "proxima_medicion",
+            "ultimo_avance",
+            "tendencia",
             "fecha_creacion",
             "fecha_actualizacion",
         ]
@@ -295,12 +384,71 @@ class IndicadorSerializer(serializers.ModelSerializer):
             "id": obj.meta.id,
             "nombre": obj.meta.nombre,
             "plan": obj.meta.plan.nombre,
+            "plan_id": obj.meta.plan_id,
+            "plan_estado": obj.meta.plan.estado,
+            "entidad": {
+                "id": obj.meta.plan.entidad_id,
+                "codigo_oficial": obj.meta.plan.entidad.codigo_oficial,
+                "nombre": obj.meta.plan.entidad.nombre,
+            },
+            "objetivo_estrategico": {
+                "id": obj.meta.objetivo_estrategico_id,
+                "codigo": obj.meta.objetivo_estrategico.codigo,
+                "nombre": obj.meta.objetivo_estrategico.nombre,
+            },
+            "alineaciones": [
+                {
+                    "id": alineacion.pk,
+                    "estado": alineacion.estado,
+                    "objetivo_pnd": {
+                        "id": alineacion.objetivo_pnd_id,
+                        "codigo": alineacion.objetivo_pnd.codigo,
+                        "nombre": alineacion.objetivo_pnd.nombre,
+                    },
+                    "ods": {
+                        "id": alineacion.ods_id,
+                        "numero": alineacion.ods.numero,
+                        "nombre": alineacion.ods.nombre,
+                    },
+                }
+                for alineacion in (
+                    obj.meta.objetivo_estrategico.alineaciones.all()
+                )
+            ],
         }
 
     def get_avances_count(self, obj):
         """Devuelve el número de avances registrados para el indicador."""
 
         return obj.avances.count()
+
+    def _seguimiento(self, obj):
+        cache = getattr(obj, "_seguimiento_serializer", None)
+        if cache is None:
+            cache = calcular_seguimiento_indicador(obj)
+            obj._seguimiento_serializer = cache
+        return cache
+
+    def get_progreso(self, obj):
+        return float(self._seguimiento(obj)["progreso"])
+
+    def get_avance_esperado(self, obj):
+        return float(self._seguimiento(obj)["avance_esperado"])
+
+    def get_estado_seguimiento(self, obj):
+        return self._seguimiento(obj)["estado_seguimiento"]
+
+    def get_etiqueta_estado_seguimiento(self, obj):
+        return self._seguimiento(obj)["etiqueta_estado_seguimiento"]
+
+    def get_proxima_medicion(self, obj):
+        return self._seguimiento(obj)["proxima_medicion"]
+
+    def get_ultimo_avance(self, obj):
+        return self._seguimiento(obj)["ultimo_avance"]
+
+    def get_tendencia(self, obj):
+        return self._seguimiento(obj)["tendencia"]
 
     def validate_nombre(self, value):
         """Normaliza y valida el nombre del indicador."""
@@ -370,12 +518,58 @@ class IndicadorSerializer(serializers.ModelSerializer):
         return value
 
     def validate_valor_meta(self, value):
-        """Valida que el valor meta sea mayor que cero."""
+        """Valida que el valor meta no sea negativo."""
 
-        if value <= 0:
-            raise serializers.ValidationError("El valor meta debe ser mayor que cero.")
+        if value < 0:
+            raise serializers.ValidationError("El valor meta no puede ser negativo.")
 
         return value
+
+    def validate(self, attrs):
+        base = attrs.get(
+            "valor_base",
+            getattr(self.instance, "valor_base", None),
+        )
+        meta = attrs.get(
+            "valor_meta",
+            getattr(self.instance, "valor_meta", None),
+        )
+        sentido = attrs.get(
+            "sentido",
+            getattr(
+                self.instance,
+                "sentido",
+                Indicador.SentidoMedicion.ASCENDENTE,
+            ),
+        )
+
+        if base is not None and meta is not None:
+            if (
+                sentido == Indicador.SentidoMedicion.ASCENDENTE
+                and meta <= base
+            ):
+                raise serializers.ValidationError(
+                    {
+                        "valor_meta": (
+                            "En un indicador ascendente, el valor meta debe "
+                            "ser mayor que el valor base."
+                        )
+                    }
+                )
+            if (
+                sentido == Indicador.SentidoMedicion.DESCENDENTE
+                and meta >= base
+            ):
+                raise serializers.ValidationError(
+                    {
+                        "valor_meta": (
+                            "En un indicador descendente, el valor meta debe "
+                            "ser menor que el valor base."
+                        )
+                    }
+                )
+
+        return attrs
 
 
 class AvanceIndicadorSerializer(serializers.ModelSerializer):
@@ -400,6 +594,7 @@ class AvanceIndicadorSerializer(serializers.ModelSerializer):
             "fecha_registro",
             "valor",
             "observacion",
+            "evidencia",
             "registrado_por",
             "registrado_por_detalle",
             "fecha_creacion",
@@ -445,6 +640,21 @@ class AvanceIndicadorSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 "No se puede registrar avance sobre un indicador inactivo."
             )
+        if not value.validado:
+            raise serializers.ValidationError(
+                "El indicador debe estar validado antes de registrar avances."
+            )
+        if (
+            not value.meta.activa
+            or value.meta.estado != Meta.EstadoMeta.ACTIVA
+        ):
+            raise serializers.ValidationError(
+                "La meta del indicador debe estar activa."
+            )
+        if value.meta.plan.estado != Plan.EstadoPlan.APROBADO:
+            raise serializers.ValidationError(
+                "Solo se registran avances de indicadores de planes aprobados."
+            )
 
         _validar_alcance_plan(self, value.meta.plan)
         return value
@@ -452,6 +662,9 @@ class AvanceIndicadorSerializer(serializers.ModelSerializer):
     def validate_observacion(self, value):
         """Normaliza la observación del avance."""
 
+        return value.strip() if value else ""
+
+    def validate_evidencia(self, value):
         return value.strip() if value else ""
 
     def validate_fecha_registro(self, value):
@@ -468,3 +681,40 @@ class AvanceIndicadorSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("El valor del avance no puede ser negativo.")
 
         return value
+
+    def validate(self, attrs):
+        indicador = attrs.get(
+            "indicador",
+            getattr(self.instance, "indicador", None),
+        )
+        fecha = attrs.get(
+            "fecha_registro",
+            getattr(self.instance, "fecha_registro", None),
+        )
+        if indicador and fecha:
+            meta = indicador.meta
+            if fecha < meta.fecha_inicio or fecha > meta.fecha_fin:
+                raise serializers.ValidationError(
+                    {
+                        "fecha_registro": (
+                            "La fecha del avance debe estar dentro del periodo "
+                            "de la meta."
+                        )
+                    }
+                )
+            duplicados = AvanceIndicador.objects.filter(
+                indicador=indicador,
+                fecha_registro=fecha,
+            )
+            if self.instance:
+                duplicados = duplicados.exclude(pk=self.instance.pk)
+            if duplicados.exists():
+                raise serializers.ValidationError(
+                    {
+                        "fecha_registro": (
+                            "Ya existe un avance de este indicador para la "
+                            "fecha seleccionada."
+                        )
+                    }
+                )
+        return attrs

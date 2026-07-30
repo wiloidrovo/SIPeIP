@@ -632,11 +632,9 @@ Como \path{planificador}:
 
 \esperado{Status \textbf{403}. Crear una alineación no significa poder validarla.}
 
-Cambie a \path{superadministrador}, obtenga su token CSRF posterior al login y repita exactamente la misma solicitud con el nuevo token.
+\atencion{No valide todavía la alineación con otro perfil. Debe permanecer en BORRADOR para que el Supervisor la revise dentro del expediente del plan en la Prueba 8.}
 
-\esperado{Status \textbf{200}, estado VALIDADA y \path{usuario_validador_detalle.username: "superadministrador"}. Si vuelve a pulsar Send, debe obtener 409 porque una alineación validada ya no está en borrador.}
-
-\section{Prueba 7: flujo completo Plan, Meta, Indicador y Avance}
+\section{Prueba 7: preparar Plan, Meta e Indicador}
 
 Cambie al usuario \path{planificador}. Use el objetivo estratégico creado en OBJ-01.
 
@@ -729,51 +727,13 @@ Si el nombre ya existe, cambie \path{GUIA-01} por otro número.
   "unidad_medida": "Porcentaje",
   "valor_base": "0.00",
   "valor_meta": "100.00",
-  "frecuencia": "MENSUAL"
+  "frecuencia": "MENSUAL",
+  "sentido": "ASCENDENTE",
+  "ponderacion": "100.00"
 }
 \end{lstlisting}
 
-\esperado{Status \textbf{201}. Copie el ID del indicador. Su \path{valor_actual} debe ser 0.00.}
-
-\subsection{AVA-01 --- Rechazar un avance negativo}
-
-\begin{enumerate}
-  \item Cree una solicitud \textbf{POST} a \path{http://localhost:8000/api/indicadores/<ID_INDICADOR>/registrar-avance/}.
-  \item En \textbf{Headers} agregue \path{Content-Type = application/json} y \path{X-CSRFToken = token actual}.
-  \item En \textbf{Body $>$ raw $>$ JSON} pegue:
-\end{enumerate}
-
-\begin{lstlisting}
-{
-  "fecha_registro": "2026-07-15",
-  "valor": "-1.00",
-  "observacion": "Valor negativo enviado intencionalmente."
-}
-\end{lstlisting}
-
-\esperado{Status \textbf{400}. No debe crearse el avance.}
-
-\subsection{AVA-02 --- Registrar un avance correcto}
-
-Mantenga el método, URL y headers anteriores. Cambie el Body por:
-
-\begin{lstlisting}
-{
-  "fecha_registro": "2026-07-15",
-  "valor": "25.00",
-  "observacion": "Primer avance registrado desde Postman."
-}
-\end{lstlisting}
-
-\esperado{Status \textbf{201}. Compruebe \path{registrado_por_detalle.username: "planificador"}; el registrador no se elige desde el Body.}
-
-Ahora cree una solicitud \textbf{GET}. No seleccione Body ni agregue filas manuales en \textbf{Headers}. Use esta URL:
-
-\begin{lstlisting}
-http://localhost:8000/api/indicadores/<ID_INDICADOR>/
-\end{lstlisting}
-
-\esperado{Status \textbf{200} y \path{valor_actual: "25.00"}. Esto comprueba que el avance actualizó el indicador.}
+\esperado{Status \textbf{201}. Copie el ID del indicador. Su \path{valor_actual} debe coincidir con la línea base 0.00, \path{sentido} debe ser ASCENDENTE, \path{ponderacion} debe ser 100.00 y \path{validado} debe ser falso.}
 
 \subsection{META-03 --- Intentar eliminar una meta que ya tiene indicador}
 
@@ -814,50 +774,138 @@ Finalmente cambie la URL a \path{http://localhost:8000/api/planes/<ID_PLAN>/apro
 
 \esperado{Status \textbf{403}. El Planificador puede enviar, pero no aprobar.}
 
-\section{Prueba 8: revisión y aprobación con Supervisor}
+\section{Prueba 8: revisar el contenido, validar y aprobar el mismo plan}
 
-Cambie al usuario \path{supervisor}. Esta prueba usa el plan de SNP que inicialmente se encuentra en EN\_REVISION.
+Cambie al usuario \path{supervisor}. Use el \path{<ID_PLAN>}, \path{<ID_ALINEACION>} e \path{<ID_INDICADOR>} creados en las pruebas anteriores.
+
+\subsection{REV-01 --- Abrir el expediente antes de decidir}
+
+Cree una solicitud \textbf{GET}, sin Body ni headers agregados manualmente:
+
+\begin{lstlisting}
+http://localhost:8000/api/planes/<ID_PLAN>/expediente/
+\end{lstlisting}
+
+\esperado{Status \textbf{200}. Antes de tomar una decisión, compruebe en el JSON: la descripción ``Plan creado para comprobar el flujo completo'', el objetivo OEI-GUIA, la meta, el indicador, el objetivo PND y el ODS 16. En \path{validacion} debe aparecer que todavía faltan las validaciones de la alineación y del indicador.}
+
+\subsection{REV-02 --- Tomar la revisión}
 
 \begin{enumerate}
-  \item Cree una solicitud \textbf{GET} a:
+  \item Cree una solicitud \textbf{POST} a \path{http://localhost:8000/api/planes/<ID_PLAN>/revisar/}.
+  \item En \textbf{Headers} agregue \path{Content-Type = application/json} y \path{X-CSRFToken = token actual}.
+  \item En \textbf{Body $>$ raw $>$ JSON} escriba:
 \end{enumerate}
 
 \begin{lstlisting}
-http://localhost:8000/api/planes/?search=Plan%20Institucional%202026-2029
+{
+  "observacion": "Se revisaron la descripcion, la meta, el indicador y la alineacion."
+}
 \end{lstlisting}
 
-En la respuesta elija el plan cuya entidad sea SNP y cuyo estado sea EN\_REVISION. Copie su ID.
+\esperado{Status \textbf{200}, estado EN\_REVISION\_INICIADA y \path{revisor_detalle.username: "supervisor"}.}
 
-Para iniciar la revisión:
+\subsection{REV-03 --- Validar la alineación del expediente}
 
 \begin{enumerate}
-  \item Cree una solicitud \textbf{POST} a \path{http://localhost:8000/api/planes/<ID_PLAN_SNP>/revisar/}.
-  \item En \textbf{Headers} agregue \path{Content-Type = application/json} y \path{X-CSRFToken = token actual}.
+  \item Cree una solicitud \textbf{POST} a \path{http://localhost:8000/api/alineaciones/<ID_ALINEACION>/validar/}.
+  \item Agregue \path{Content-Type = application/json} y \path{X-CSRFToken = token actual}.
   \item En \textbf{Body $>$ raw $>$ JSON} escriba \texttt{\{\}}.
   \item Pulse \textbf{Send}.
 \end{enumerate}
 
-\esperado{Status \textbf{200} y estado EN\_REVISION\_INICIADA.}
+\esperado{Status \textbf{200}, estado VALIDADA y \path{usuario_validador_detalle.username: "supervisor"}. Esta relación hace que el ODS y el PND aparezcan en las metas e indicadores que contribuyen al objetivo estratégico.}
 
-Para aprobarlo, cambie únicamente la URL a:
+\subsection{REV-04 --- Validar la ficha del indicador}
+
+\begin{enumerate}
+  \item Cree una solicitud \textbf{POST} a \path{http://localhost:8000/api/indicadores/<ID_INDICADOR>/validar/}.
+  \item Mantenga los dos headers y el Body \texttt{\{\}}.
+  \item Pulse \textbf{Send}.
+\end{enumerate}
+
+\esperado{Status \textbf{200}, \path{validado: true}, \path{validado_por_detalle.username: "supervisor"} y una fecha de validación.}
+
+\subsection{REV-05 --- Confirmar que el expediente ya puede aprobarse}
+
+Cree una solicitud \textbf{GET}, sin Body:
 
 \begin{lstlisting}
-http://localhost:8000/api/planes/<ID_PLAN_SNP>/aprobar/
+http://localhost:8000/api/planes/<ID_PLAN>/validacion/
 \end{lstlisting}
 
-Mantenga POST, los dos headers y el Body \texttt{\{\}}.
+\esperado{Status \textbf{200}, \path{listo_para_aprobacion: true} y una lista vacía en \path{bloqueos_aprobacion}. Si todavía existe un bloqueo, corríjalo antes de continuar; no fuerce el estado del plan con PATCH.}
 
-\esperado{Status \textbf{200} y estado APROBADO.}
+\subsection{REV-06 --- Aprobar después de revisar el contenido}
 
-Para comprobar el historial cree una solicitud \textbf{GET}. No seleccione Body ni agregue filas manuales en \textbf{Headers}. Use esta URL:
+Cree una solicitud \textbf{POST} a:
 
 \begin{lstlisting}
-http://localhost:8000/api/planes/<ID_PLAN_SNP>/historial/
+http://localhost:8000/api/planes/<ID_PLAN>/aprobar/
 \end{lstlisting}
 
-\esperado{Aparecen las acciones de iniciar revisión y aprobar, realizadas por \path{supervisor}.}
+Use los dos headers y este Body:
 
-Si el plan ya estaba aprobado antes de empezar, no fuerce su estado con PATCH. Use otro plan de SNP que haya llegado correctamente a EN\_REVISION o deje esta prueba anotada como ya ejecutada.
+\begin{lstlisting}
+{
+  "observacion": "Expediente completo, alineacion e indicador validados."
+}
+\end{lstlisting}
+
+\esperado{Status \textbf{200}, estado APROBADO, \path{aprobado_por_detalle.username: "supervisor"} y fecha de aprobación.}
+
+\subsection{AVA-01 --- Comprobar que un avance negativo se rechaza}
+
+Cambie nuevamente a \path{planificador}. El avance se prueba ahora, porque SIPeIP solo permite medir indicadores validados de planes aprobados.
+
+\begin{enumerate}
+  \item Cree una solicitud \textbf{POST} a \path{http://localhost:8000/api/indicadores/<ID_INDICADOR>/registrar-avance/}.
+  \item Agregue \path{Content-Type = application/json} y \path{X-CSRFToken = token actual}.
+  \item Use este Body:
+\end{enumerate}
+
+\begin{lstlisting}
+{
+  "fecha_registro": "2026-07-15",
+  "valor": "-1.00",
+  "observacion": "Valor negativo enviado intencionalmente."
+}
+\end{lstlisting}
+
+\esperado{Status \textbf{400}. No se crea ningún avance ni cambia el valor actual.}
+
+\subsection{AVA-02 --- Registrar una medición con evidencia}
+
+Mantenga la misma URL y reemplace el Body:
+
+\begin{lstlisting}
+{
+  "fecha_registro": "2026-07-15",
+  "valor": "25.00",
+  "observacion": "Primer avance del indicador aprobado.",
+  "evidencia": "Acta interna de medicion GUIA-01"
+}
+\end{lstlisting}
+
+\esperado{Status \textbf{201}. El registrador debe ser \path{planificador}, aunque ese campo no se envió. El valor actual pasa a 25.00 y la evidencia queda en el historial.}
+
+\subsection{AVA-03 --- Consultar el seguimiento calculado}
+
+Cree estas dos solicitudes \textbf{GET}, sin Body ni headers manuales:
+
+\begin{lstlisting}
+http://localhost:8000/api/indicadores/<ID_INDICADOR>/seguimiento/
+http://localhost:8000/api/planes/<ID_PLAN>/seguimiento/
+\end{lstlisting}
+
+\esperado{Ambas responden \textbf{200}. El indicador muestra línea base 0, valor actual 25, meta 100, progreso 25 por ciento, próxima medición, estado de seguimiento, ODS 16 y la serie de avances. El plan consolida ese resultado dentro de su objetivo y meta; el valor ya no está suelto.}
+
+Para comprobar la trazabilidad del flujo cree una solicitud \textbf{GET}:
+
+\begin{lstlisting}
+http://localhost:8000/api/planes/<ID_PLAN>/historial/
+\end{lstlisting}
+
+\esperado{Aparecen al menos ENVIAR\_REVISION, INICIAR\_REVISION y APROBAR, con sus usuarios, fechas, estados anterior/nuevo y observaciones.}
 
 \section{Prueba 9: seguimiento de un proyecto}
 

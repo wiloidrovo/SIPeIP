@@ -100,6 +100,34 @@ class EntidadInstitucionalViewSet(
                 {"detail": "La entidad ya se encuentra inactiva."},
                 status=status.HTTP_409_CONFLICT,
             )
+        from apps.planes.models import Plan
+
+        plan_vigente = (
+            Plan.objects.select_for_update()
+            .filter(
+                entidad=entidad,
+                estado__in={
+                    Plan.EstadoPlan.EN_REVISION,
+                    Plan.EstadoPlan.EN_REVISION_INICIADA,
+                    Plan.EstadoPlan.APROBADO,
+                },
+            )
+            .order_by("pk")
+            .first()
+        )
+        if plan_vigente:
+            return Response(
+                {
+                    "code": "entidad_con_plan_vigente",
+                    "detail": (
+                        "No se puede desactivar la entidad mientras mantenga "
+                        f"el plan «{plan_vigente.nombre}» en estado "
+                        f"{plan_vigente.estado}."
+                    ),
+                    "plan_id": plan_vigente.pk,
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
         antes = serializar_instancia(entidad)
         entidad.estado = EntidadInstitucional.Estado.INACTIVA
         entidad.save(update_fields=["estado", "fecha_actualizacion"])

@@ -1,3 +1,4 @@
+from django.db.models import Q
 from rest_framework import serializers
 from rest_framework.exceptions import PermissionDenied
 
@@ -49,6 +50,37 @@ def _resumen_usuario(usuario):
     }
 
 
+def _planes_visibles(serializer):
+    """Obtiene el alcance real de planes para agregados y relaciones."""
+
+    cache = getattr(serializer, "_planes_visibles_cache", None)
+    if cache is not None:
+        return cache
+
+    from apps.configuracion.scope import obtener_alcance_usuario
+    from apps.planes.models import Plan
+    from apps.planes.scope import filtrar_queryset_por_alcance_plan
+
+    request = serializer.context.get("request")
+    usuario = getattr(request, "user", None)
+    if not usuario or not usuario.is_authenticated:
+        queryset = Plan.objects.none()
+    else:
+        queryset = filtrar_queryset_por_alcance_plan(
+            Plan.objects.all(),
+            usuario,
+        )
+        if obtener_alcance_usuario(usuario) in {
+            "ENTIDAD",
+            "PROPIO_ASIGNADO",
+        }:
+            queryset = queryset.filter(
+                Q(creado_por=usuario) | Q(responsable=usuario)
+            )
+    serializer._planes_visibles_cache = queryset
+    return queryset
+
+
 class _CatalogoTextoSerializer(serializers.ModelSerializer):
     """Validaciones comunes de los catálogos codificados."""
 
@@ -74,7 +106,9 @@ class ObjetivoEstrategicoSerializer(_CatalogoTextoSerializer):
     )
     entidad_detalle = serializers.SerializerMethodField()
     metas_count = serializers.SerializerMethodField()
+    planes_count = serializers.SerializerMethodField()
     alineaciones_count = serializers.SerializerMethodField()
+    ods_resumen = serializers.SerializerMethodField()
 
     class Meta:
         model = ObjetivoEstrategico
@@ -87,7 +121,9 @@ class ObjetivoEstrategicoSerializer(_CatalogoTextoSerializer):
             "descripcion",
             "estado",
             "metas_count",
+            "planes_count",
             "alineaciones_count",
+            "ods_resumen",
             "fecha_creacion",
             "fecha_actualizacion",
         ]
@@ -96,7 +132,9 @@ class ObjetivoEstrategicoSerializer(_CatalogoTextoSerializer):
             "entidad_detalle",
             "estado",
             "metas_count",
+            "planes_count",
             "alineaciones_count",
+            "ods_resumen",
             "fecha_creacion",
             "fecha_actualizacion",
         ]
@@ -105,14 +143,36 @@ class ObjetivoEstrategicoSerializer(_CatalogoTextoSerializer):
         return _resumen_entidad(obj.entidad)
 
     def get_metas_count(self, obj):
-        if hasattr(obj, "metas_count_anotado"):
-            return obj.metas_count_anotado
-        return obj.metas.count()
+        return obj.metas.filter(
+            plan__in=_planes_visibles(self)
+        ).count()
 
     def get_alineaciones_count(self, obj):
         if hasattr(obj, "alineaciones_count_anotado"):
             return obj.alineaciones_count_anotado
         return obj.alineaciones.count()
+
+    def get_planes_count(self, obj):
+        return _planes_visibles(self).filter(
+            metas__objetivo_estrategico=obj
+        ).distinct().count()
+
+    def get_ods_resumen(self, obj):
+        vistos = set()
+        resultado = []
+        for alineacion in obj.alineaciones.all():
+            if alineacion.ods_id in vistos:
+                continue
+            vistos.add(alineacion.ods_id)
+            resultado.append(
+                {
+                    "id": alineacion.ods_id,
+                    "numero": alineacion.ods.numero,
+                    "nombre": alineacion.ods.nombre,
+                    "estado_alineacion": alineacion.estado,
+                }
+            )
+        return resultado
 
     def validate(self, attrs):
         instance = self.instance
@@ -301,6 +361,11 @@ class AlineacionSerializer(serializers.ModelSerializer):
     usuario_creador_detalle = serializers.SerializerMethodField()
     usuario_validador = serializers.PrimaryKeyRelatedField(read_only=True)
     usuario_validador_detalle = serializers.SerializerMethodField()
+    planes_count = serializers.SerializerMethodField()
+    metas_count = serializers.SerializerMethodField()
+    indicadores_count = serializers.SerializerMethodField()
+    planes_relacionados = serializers.SerializerMethodField()
+    puede_resolver = serializers.SerializerMethodField()
 
     class Meta:
         model = Alineacion
@@ -320,6 +385,11 @@ class AlineacionSerializer(serializers.ModelSerializer):
             "usuario_creador_detalle",
             "usuario_validador",
             "usuario_validador_detalle",
+            "planes_count",
+            "metas_count",
+            "indicadores_count",
+            "planes_relacionados",
+            "puede_resolver",
             "fecha_creacion",
             "fecha_actualizacion",
         ]
@@ -335,6 +405,11 @@ class AlineacionSerializer(serializers.ModelSerializer):
             "usuario_creador_detalle",
             "usuario_validador",
             "usuario_validador_detalle",
+            "planes_count",
+            "metas_count",
+            "indicadores_count",
+            "planes_relacionados",
+            "puede_resolver",
             "fecha_creacion",
             "fecha_actualizacion",
         ]
@@ -376,6 +451,51 @@ class AlineacionSerializer(serializers.ModelSerializer):
 
     def get_usuario_validador_detalle(self, obj):
         return _resumen_usuario(obj.usuario_validador)
+
+    def get_planes_count(self, obj):
+        return _planes_visibles(self).filter(
+            metas__objetivo_estrategico=obj.objetivo_estrategico
+        ).distinct().count()
+
+    def get_metas_count(self, obj):
+        return obj.objetivo_estrategico.metas.filter(
+            plan__in=_planes_visibles(self)
+        ).count()
+
+    def get_indicadores_count(self, obj):
+        from apps.metas.models import Indicador
+
+        return Indicador.objects.filter(
+            meta__objetivo_estrategico=obj.objetivo_estrategico,
+            meta__plan__in=_planes_visibles(self),
+        ).count()
+
+    def get_planes_relacionados(self, obj):
+        return list(
+            _planes_visibles(self)
+            .filter(
+                metas__objetivo_estrategico=obj.objetivo_estrategico
+            )
+            .distinct()
+            .order_by("nombre", "pk")
+            .values("id", "nombre", "estado")
+        )
+
+    def get_puede_resolver(self, obj):
+        request = self.context.get("request")
+        usuario = getattr(request, "user", None)
+        if not usuario or not usuario.is_authenticated:
+            return False
+        if usuario.is_superuser and usuario.is_active:
+            return True
+
+        from apps.planes.models import Plan
+
+        return _planes_visibles(self).filter(
+            metas__objetivo_estrategico=obj.objetivo_estrategico,
+            estado=Plan.EstadoPlan.EN_REVISION_INICIADA,
+            revisor=usuario,
+        ).exists()
 
     def validate_justificacion(self, value):
         justificacion = value.strip()

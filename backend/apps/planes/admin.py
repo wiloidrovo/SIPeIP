@@ -13,12 +13,29 @@ class PlanAdmin(admin.ModelAdmin):
         "entidad",
         "responsable",
         "creado_por",
+        "revisor",
+        "aprobado_por",
         "periodo_inicio",
         "periodo_fin",
         "activo",
     )
     list_filter = ("estado", "activo", "entidad", "periodo_inicio", "periodo_fin")
-    search_fields = ("nombre", "descripcion", "responsable__username")
+    search_fields = (
+        "nombre",
+        "descripcion",
+        "responsable__username",
+        "revisor__username",
+        "aprobado_por__username",
+    )
+    readonly_fields = (
+        "revisor",
+        "aprobado_por",
+        "fecha_envio_revision",
+        "fecha_inicio_revision",
+        "fecha_aprobacion",
+        "fecha_creacion",
+        "fecha_actualizacion",
+    )
     ordering = ("-fecha_creacion",)
 
 

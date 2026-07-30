@@ -69,6 +69,16 @@ def filtrar_queryset_por_alcance_plan(queryset, usuario, plan_lookup=""):
                     ): usuario.pk
                 }
             )
+            | Q(
+                **{
+                    _ruta_plan(plan_lookup, "revisor_id"): usuario.pk,
+                }
+            )
+            | Q(
+                **{
+                    _ruta_plan(plan_lookup, "aprobado_por_id"): usuario.pk,
+                }
+            )
         ).distinct()
 
     entidad_lookup = (

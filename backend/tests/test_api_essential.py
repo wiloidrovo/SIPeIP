@@ -3,12 +3,19 @@ from decimal import Decimal
 from django.contrib.auth import get_user_model
 from django.core.management.utils import get_random_string
 from django.test import TestCase
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from apps.auditoria.models import EventoAuditoria
 from apps.configuracion.models import EntidadInstitucional
 from apps.metas.models import AvanceIndicador, Indicador, Meta
-from apps.objetivos.models import ObjetivoEstrategico
+from apps.objetivos.models import (
+    Alineacion,
+    EjePND,
+    ODS,
+    ObjetivoEstrategico,
+    ObjetivoPND,
+)
 from apps.planes.models import HistorialEstadoPlan, Plan
 from apps.roles.models import Rol
 
@@ -44,11 +51,14 @@ class SipeipApiEssentialTests(TestCase):
                 "metas.crear",
                 "metas.editar",
                 "metas.eliminar",
+                "metas.archivar",
                 "indicadores.ver",
                 "indicadores.crear",
                 "indicadores.editar",
                 "indicadores.eliminar",
                 "indicadores.registrar_avance",
+                "objetivos.ver",
+                "alineaciones.ver",
                 "reportes.ver",
             ],
         )
@@ -74,6 +84,9 @@ class SipeipApiEssentialTests(TestCase):
                 "metas.ver",
                 "indicadores.ver",
                 "indicadores.validar",
+                "objetivos.ver",
+                "alineaciones.ver",
+                "alineaciones.validar",
             ],
         )
         cls.rol_sin_permisos = Rol.objects.create(
@@ -144,6 +157,29 @@ class SipeipApiEssentialTests(TestCase):
             nombre="Objetivo aislado B",
             descripcion="Objetivo creado únicamente dentro de la base de pruebas.",
         )
+        cls.eje_pnd = EjePND.objects.create(
+            codigo="EJE-TEST",
+            nombre="Eje aislado de prueba",
+            descripcion="Catálogo exclusivo de la suite automatizada.",
+        )
+        cls.objetivo_pnd = ObjetivoPND.objects.create(
+            eje=cls.eje_pnd,
+            codigo="PND-TEST",
+            nombre="Objetivo PND aislado",
+            descripcion="Catálogo exclusivo de la suite automatizada.",
+        )
+        cls.ods = ODS.objects.create(
+            numero=16,
+            nombre="ODS aislado de prueba",
+            descripcion="Registro exclusivo de la suite automatizada.",
+        )
+        cls.alineacion_a = Alineacion.objects.create(
+            objetivo_estrategico=cls.objetivo_a,
+            objetivo_pnd=cls.objetivo_pnd,
+            ods=cls.ods,
+            justificacion="Alineación exclusiva para comprobar el flujo de revisión.",
+            usuario_creador=cls.planificador,
+        )
         cls.plan_a = Plan.objects.create(
             nombre="Plan aislado A",
             descripcion="Registro de prueba de la entidad A.",
@@ -191,6 +227,7 @@ class SipeipApiEssentialTests(TestCase):
             valor_meta=Decimal("100.00"),
             valor_actual=Decimal("0.00"),
             frecuencia=Indicador.FrecuenciaMedicion.MENSUAL,
+            ponderacion=Decimal("100.00"),
         )
 
     @staticmethod
@@ -284,6 +321,42 @@ class SipeipApiEssentialTests(TestCase):
         self.assertIn(self.plan_externo_a.nombre, nombres)
         self.assertNotIn(self.plan_b.nombre, nombres)
 
+    def test_agregados_de_alineacion_respetan_planes_visibles(self):
+        meta_ajena = Meta.objects.create(
+            plan=self.plan_externo_a,
+            objetivo_estrategico=self.objetivo_a,
+            nombre="Meta no asignada al planificador",
+            descripcion="No debe contarse fuera del alcance propio.",
+            resultado_esperado="Mantener aislamiento de agregados.",
+            fecha_inicio="2026-01-01",
+            fecha_fin="2026-12-31",
+            estado=Meta.EstadoMeta.ACTIVA,
+            activa=True,
+        )
+        Indicador.objects.create(
+            meta=meta_ajena,
+            nombre="Indicador no asignado",
+            descripcion="No debe incluirse en agregados ajenos.",
+            unidad_medida="Porcentaje",
+            valor_base=Decimal("0.00"),
+            valor_meta=Decimal("100.00"),
+            valor_actual=Decimal("0.00"),
+            ponderacion=Decimal("100.00"),
+        )
+
+        response = self._cliente_autenticado(self.planificador).get(
+            f"/api/alineaciones/{self.alineacion_a.pk}/"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["planes_count"], 1)
+        self.assertEqual(response.data["metas_count"], 1)
+        self.assertEqual(response.data["indicadores_count"], 1)
+        self.assertEqual(
+            {plan["id"] for plan in response.data["planes_relacionados"]},
+            {self.plan_a.pk},
+        )
+
     def test_meta_rechaza_objetivo_de_otra_entidad_y_acepta_el_coherente(self):
         client = self._cliente_autenticado(self.superusuario)
         base = {
@@ -373,6 +446,22 @@ class SipeipApiEssentialTests(TestCase):
             {},
             format="json",
         )
+        seguimiento_indicador = supervisor.get(
+            f"/api/indicadores/{self.indicador.pk}/seguimiento/"
+        )
+        alineacion_asignada = supervisor.get(
+            f"/api/alineaciones/{self.alineacion_a.pk}/"
+        )
+        validacion_alineacion = supervisor.post(
+            f"/api/alineaciones/{self.alineacion_a.pk}/validar/",
+            {},
+            format="json",
+        )
+        validacion_indicador = supervisor.post(
+            f"/api/indicadores/{self.indicador.pk}/validar/",
+            {},
+            format="json",
+        )
         aprobacion = supervisor.post(
             f"/api/planes/{self.plan_a.pk}/aprobar/",
             {},
@@ -384,6 +473,15 @@ class SipeipApiEssentialTests(TestCase):
 
         self.plan_a.refresh_from_db()
         self.assertEqual(revision.status_code, 200)
+        self.assertEqual(seguimiento_indicador.status_code, 200)
+        self.assertEqual(
+            seguimiento_indicador.data["plan"]["revisor"],
+            self.supervisor.pk,
+        )
+        self.assertEqual(alineacion_asignada.status_code, 200)
+        self.assertTrue(alineacion_asignada.data["puede_resolver"])
+        self.assertEqual(validacion_alineacion.status_code, 200)
+        self.assertEqual(validacion_indicador.status_code, 200)
         self.assertEqual(aprobacion.status_code, 200)
         self.assertEqual(self.plan_a.estado, Plan.EstadoPlan.APROBADO)
         self.assertEqual(detalle_posterior.status_code, 200)
@@ -395,7 +493,112 @@ class SipeipApiEssentialTests(TestCase):
             {plan["id"] for plan in otra_bandeja.data},
         )
 
+    def test_expediente_aprobado_inmoviliza_objetivo_y_catalogos(self):
+        Plan.objects.filter(pk=self.plan_a.pk).update(
+            estado=Plan.EstadoPlan.APROBADO,
+        )
+        client = self._cliente_autenticado(self.superusuario)
+
+        objetivo = client.patch(
+            f"/api/objetivos-estrategicos/{self.objetivo_a.pk}/",
+            {"descripcion": "Intento de alterar una decisión histórica."},
+            format="json",
+        )
+        ods = client.post(
+            f"/api/ods/{self.ods.pk}/desactivar/",
+            {},
+            format="json",
+        )
+        ods_alternativo = ODS.objects.create(
+            numero=17,
+            nombre="ODS alternativo de prueba",
+            descripcion="Catálogo auxiliar exclusivo de esta prueba.",
+        )
+        nueva_alineacion = client.post(
+            "/api/alineaciones/",
+            {
+                "objetivo_estrategico": self.objetivo_a.pk,
+                "objetivo_pnd": self.objetivo_pnd.pk,
+                "ods": ods_alternativo.pk,
+                "justificacion": (
+                    "Intento de cambiar la alineación de un expediente aprobado."
+                ),
+            },
+            format="json",
+        )
+        alineacion_existente = client.patch(
+            f"/api/alineaciones/{self.alineacion_a.pk}/",
+            {"justificacion": "Intento de alterar la alineación aprobada."},
+            format="json",
+        )
+        entidad = client.post(
+            (
+                f"/api/configuracion/entidades/"
+                f"{self.entidad_a.pk}/desactivar/"
+            ),
+            {},
+            format="json",
+        )
+
+        self.assertEqual(objetivo.status_code, 409)
+        self.assertEqual(objetivo.data["code"], "expediente_inmutable")
+        self.assertEqual(ods.status_code, 409)
+        self.assertEqual(ods.data["code"], "expediente_inmutable")
+        self.assertEqual(nueva_alineacion.status_code, 409)
+        self.assertEqual(
+            nueva_alineacion.data["code"],
+            "expediente_inmutable",
+        )
+        self.assertEqual(alineacion_existente.status_code, 409)
+        self.assertEqual(
+            alineacion_existente.data["code"],
+            "expediente_inmutable",
+        )
+        self.assertEqual(entidad.status_code, 409)
+        self.assertEqual(entidad.data["code"], "entidad_con_plan_vigente")
+
+    def test_plan_aprobado_impide_archivar_meta_y_alterar_seguimiento(self):
+        Plan.objects.filter(pk=self.plan_a.pk).update(
+            estado=Plan.EstadoPlan.APROBADO,
+        )
+        response = self._cliente_autenticado(self.planificador).post(
+            f"/api/metas/{self.meta_activa.pk}/archivar/",
+            {},
+            format="json",
+        )
+
+        self.meta_activa.refresh_from_db()
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.data["code"], "plan_no_editable")
+        self.assertEqual(self.meta_activa.estado, Meta.EstadoMeta.ACTIVA)
+        self.assertTrue(self.meta_activa.activa)
+
+    def test_catalogo_inactivo_bloquea_envio_del_plan(self):
+        ODS.objects.filter(pk=self.ods.pk).update(estado="INACTIVO")
+        response = self._cliente_autenticado(self.planificador).post(
+            f"/api/planes/{self.plan_a.pk}/enviar-a-revision/",
+            {"observacion": "No debe enviarse con catálogos obsoletos."},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 409)
+        codigos = {
+            bloqueo["codigo"]
+            for bloqueo in response.data["validacion"]["bloqueos_revision"]
+        }
+        self.assertIn("ALINEACION_CON_CATALOGO_INACTIVO", codigos)
+
     def test_avance_usa_usuario_de_sesion_y_actualiza_indicador(self):
+        Plan.objects.filter(pk=self.plan_a.pk).update(
+            estado=Plan.EstadoPlan.APROBADO,
+        )
+        Indicador.objects.filter(pk=self.indicador.pk).update(
+            validado=True,
+            validado_por=self.supervisor,
+            fecha_validacion=timezone.now(),
+        )
+        self.plan_a.refresh_from_db()
+        self.indicador.refresh_from_db()
         client = self._cliente_autenticado(self.planificador)
         url = f"/api/indicadores/{self.indicador.pk}/registrar-avance/"
 

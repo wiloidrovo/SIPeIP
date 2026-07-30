@@ -3,9 +3,19 @@ import { Link } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { PageHeader } from "../components/PageHeader";
 import { EmptyState, Feedback, LoadingState } from "../components/States";
+import { TrackingStatus } from "../components/TrackingStatus";
 import { apiRequest } from "../services/api";
 
-type Widget = { codigo: string; titulo: string; valor: number; detalle: string; ruta: string };
+type Widget = {
+  codigo: string;
+  titulo: string;
+  valor: number;
+  detalle: string;
+  ruta: string;
+  progreso?: number | null;
+  estado_seguimiento?: string;
+  etiqueta_estado_seguimiento?: string;
+};
 type Dashboard = { alcance: string; entidad: { id: number; codigo_oficial: string; nombre: string } | null; widgets: Widget[] };
 
 const SCOPE_LABELS: Record<string, string> = {
@@ -28,7 +38,7 @@ export function DashboardPage() {
     {!data && !error ? <LoadingState label="Preparando el panel" /> : null}
     {data ? <>
       <section className="context-banner"><div><span>Institución</span><strong>{data.entidad?.nombre ?? "Cobertura general"}</strong></div><div><span>Acceso</span><strong>{SCOPE_LABELS[data.alcance] ?? "Institucional"}</strong></div><div><span>Perfil</span><strong>{user?.rol?.nombre ?? "Administración"}</strong></div></section>
-      {data.widgets.length ? <section className="widget-grid">{data.widgets.map((widget) => <Link className="metric-card" to={widget.ruta} key={widget.codigo}><span>{widget.titulo}</span><strong>{widget.valor.toLocaleString("es-EC")}</strong><small>{widget.detalle || "Consultar registros"}</small></Link>)}</section> : <EmptyState title="Sin información pendiente" detail="No hay elementos disponibles para mostrar en este momento." />}
+      {data.widgets.length ? <section className="widget-grid">{data.widgets.map((widget) => <Link className="metric-card" to={widget.ruta} key={widget.codigo}><span>{widget.titulo}</span><strong>{widget.valor.toLocaleString("es-EC")}</strong>{widget.progreso !== undefined || widget.estado_seguimiento ? <TrackingStatus compact progress={widget.progreso} status={widget.estado_seguimiento} label={widget.etiqueta_estado_seguimiento} /> : null}<small>{widget.detalle || "Consultar registros"}</small></Link>)}</section> : <EmptyState title="Sin información pendiente" detail="No hay elementos disponibles para mostrar en este momento." />}
       <section className="panel dashboard-guidance"><div><h2>Acceso institucional</h2><p>El menú y la información disponible corresponden a sus responsabilidades asignadas.</p></div></section>
     </> : null}
   </>;

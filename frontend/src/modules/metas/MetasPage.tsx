@@ -1,8 +1,10 @@
+import { Link } from "react-router-dom";
 import { ResourcePage, optionsFrom } from "../../components/ResourcePage";
 import type {
   SelectFilterContext,
   SelectOption,
 } from "../../components/ResourcePage";
+import { OdsBadges, TrackingStatus } from "../../components/TrackingStatus";
 import type { ApiRecord } from "../../services/api";
 
 const editablePlanStates = new Set(["BORRADOR", "DEVUELTO", "RECHAZADO"]);
@@ -76,6 +78,23 @@ function planIsEditable(item: ApiRecord) {
   );
 }
 
+function planIsApproved(item: ApiRecord) {
+  const detail = asRecord(item.plan_detalle);
+  return String(detail?.estado) === "APROBADO";
+}
+
+function goalIsExpired(item: ApiRecord) {
+  const endDate = String(item.fecha_fin ?? "").slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(endDate)) return false;
+  const today = new Date();
+  const localToday = [
+    today.getFullYear(),
+    String(today.getMonth() + 1).padStart(2, "0"),
+    String(today.getDate()).padStart(2, "0"),
+  ].join("-");
+  return endDate < localToday;
+}
+
 function objectiveIsActive(item: ApiRecord) {
   const detail = asRecord(item.objetivo_estrategico_detalle);
   return String(detail?.estado) === "ACTIVO";
@@ -127,9 +146,14 @@ export function MetasPage() {
           label: "Plan / entidad",
           render: (item) => {
             const plan = asRecord(item.plan_detalle);
+            const planId = plan?.id;
             return (
               <span>
-                {String(plan?.nombre ?? "Sin plan")}
+                {planId ? (
+                  <Link className="table-primary-link" to={`/planes/${String(planId)}`}>
+                    {String(plan?.nombre ?? "Sin plan")}
+                  </Link>
+                ) : String(plan?.nombre ?? "Sin plan")}
                 <small className="table-detail">{entityContext(plan?.entidad)}</small>
               </span>
             );
@@ -153,12 +177,42 @@ export function MetasPage() {
         { key: "resultado_esperado", label: "Resultado esperado" },
         { key: "fecha_fin", label: "Vencimiento" },
         { key: "indicadores_count", label: "Indicadores" },
+        {
+          key: "progreso",
+          label: "Cumplimiento",
+          render: (item) => (
+            <TrackingStatus
+              compact
+              progress={item.progreso}
+              status={String(item.estado_seguimiento ?? "")}
+              label={typeof item.etiqueta_estado_seguimiento === "string" ? item.etiqueta_estado_seguimiento : undefined}
+            />
+          ),
+        },
+        {
+          key: "alineaciones",
+          label: "ODS",
+          render: (item) => {
+            const objective = asRecord(item.objetivo_estrategico_detalle);
+            return (
+              <OdsBadges
+                value={
+                  item.alineaciones
+                  ?? item.ods_resumen
+                  ?? item.ods
+                  ?? objective?.alineaciones
+                  ?? []
+                }
+              />
+            );
+          },
+        },
         { key: "estado", label: "Estado" },
       ]}
       actions={[
         { key: "activar", label: "Activar", permission: "metas.editar", states: ["BORRADOR"], tone: "success", confirm: "La meta quedará activa para el seguimiento.", canRun: (item) => planIsEditable(item) && objectiveIsActive(item) },
-        { key: "cerrar", label: "Cerrar", permission: "metas.editar", states: ["ACTIVA"], confirm: "La meta quedará cerrada y no admitirá edición ordinaria." },
-        { key: "archivar", label: "Archivar", permission: "metas.archivar", states: ["BORRADOR", "ACTIVA", "CERRADA"], tone: "danger", confirm: "La meta y su historial se conservarán como registro archivado." },
+        { key: "cerrar", label: "Cerrar", permission: "metas.editar", states: ["ACTIVA"], confirm: "La meta quedará cerrada y no admitirá edición ordinaria.", canRun: (item) => planIsApproved(item) && (Number(item.progreso) >= 100 || goalIsExpired(item)) },
+        { key: "archivar", label: "Archivar", permission: "metas.archivar", states: ["BORRADOR", "ACTIVA", "CERRADA"], tone: "danger", confirm: "La meta y su historial se conservarán como registro archivado.", canRun: planIsEditable },
       ]}
       extraContent={(
         <section className="panel dashboard-guidance" aria-label="Relación entre metas y objetivos">

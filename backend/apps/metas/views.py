@@ -1,5 +1,5 @@
 from django.db import transaction
-from django.db.models import Count, Q
+from django.db.models import Count, Prefetch, Q
 from django.db.models.deletion import ProtectedError
 from django.utils import timezone
 from rest_framework import filters, serializers, status, viewsets
@@ -16,7 +16,8 @@ from apps.auditoria.services import (
 from apps.configuracion.scope import (
     obtener_alcance_usuario,
 )
-from apps.objetivos.models import EstadoCatalogo
+from apps.objetivos.models import Alineacion, EstadoCatalogo
+from apps.objetivos.serializers import AlineacionSerializer
 from apps.planes.models import Plan
 from apps.planes.scope import filtrar_queryset_por_alcance_plan
 from apps.roles.permissions import HasSipeipPermission
@@ -28,6 +29,7 @@ from .serializers import (
     MetaSerializer,
     _validar_alcance_plan,
 )
+from .services import calcular_seguimiento_indicador, calcular_seguimiento_meta
 
 
 def _filtrar_propios(queryset, usuario, plan_lookup):
@@ -51,6 +53,23 @@ class MetaViewSet(AuditoriaModelViewSetMixin, viewsets.ModelViewSet):
             "objetivo_estrategico",
             "objetivo_estrategico__entidad",
         )
+        .prefetch_related(
+            Prefetch(
+                "objetivo_estrategico__alineaciones",
+                queryset=Alineacion.objects.select_related(
+                    "objetivo_pnd__eje",
+                    "ods",
+                    "usuario_creador",
+                    "usuario_validador",
+                ),
+            ),
+            Prefetch(
+                "indicadores",
+                queryset=Indicador.objects.select_related(
+                    "validado_por"
+                ).prefetch_related("avances__registrado_por"),
+            ),
+        )
         .annotate(indicadores_count_anotado=Count("indicadores"))
         .all()
     )
@@ -66,6 +85,7 @@ class MetaViewSet(AuditoriaModelViewSetMixin, viewsets.ModelViewSet):
         "activar": "metas.editar",
         "cerrar": "metas.editar",
         "archivar": "metas.archivar",
+        "seguimiento": "metas.ver",
     }
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = [
@@ -222,6 +242,22 @@ class MetaViewSet(AuditoriaModelViewSetMixin, viewsets.ModelViewSet):
                 {"detail": "La meta ya se encuentra archivada."},
                 status=status.HTTP_409_CONFLICT,
             )
+        if meta.plan.estado not in {
+            Plan.EstadoPlan.BORRADOR,
+            Plan.EstadoPlan.DEVUELTO,
+            Plan.EstadoPlan.RECHAZADO,
+        }:
+            return Response(
+                {
+                    "code": "plan_no_editable",
+                    "detail": (
+                        "No se puede archivar una meta de un plan en revisión, "
+                        "aprobado o archivado porque alteraría su expediente y "
+                        "su seguimiento histórico."
+                    ),
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
 
         antes = serializar_instancia(meta)
         meta.estado = Meta.EstadoMeta.ARCHIVADA
@@ -316,6 +352,31 @@ class MetaViewSet(AuditoriaModelViewSetMixin, viewsets.ModelViewSet):
                 {"detail": "Solo una meta activa puede cerrarse."},
                 status=status.HTTP_409_CONFLICT,
             )
+        if meta.plan.estado != Plan.EstadoPlan.APROBADO:
+            return Response(
+                {
+                    "detail": (
+                        "La meta solo puede cerrarse durante el seguimiento "
+                        "de un plan aprobado."
+                    )
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        seguimiento = calcular_seguimiento_meta(meta)
+        vencida = timezone.localdate() > meta.fecha_fin
+        if seguimiento["progreso"] < 100 and not vencida:
+            return Response(
+                {
+                    "code": "meta_no_cumplida",
+                    "detail": (
+                        "Antes de su vencimiento, la meta solo puede cerrarse "
+                        "cuando alcanza el 100 % de cumplimiento."
+                    ),
+                    "seguimiento": seguimiento,
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
 
         antes = serializar_instancia(meta)
         meta.estado = Meta.EstadoMeta.CERRADA
@@ -333,13 +394,56 @@ class MetaViewSet(AuditoriaModelViewSetMixin, viewsets.ModelViewSet):
         serializer = self.get_serializer(meta)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
+    @action(detail=True, methods=["get"])
+    def seguimiento(self, request, pk=None):
+        meta = self.get_object()
+        return Response(
+            {
+                "meta": self.get_serializer(meta).data,
+                **calcular_seguimiento_meta(meta),
+                "alineaciones": AlineacionSerializer(
+                    meta.objetivo_estrategico.alineaciones.all(),
+                    many=True,
+                    context=self.get_serializer_context(),
+                ).data,
+                "indicadores": IndicadorSerializer(
+                    meta.indicadores.all(),
+                    many=True,
+                    context=self.get_serializer_context(),
+                ).data,
+            },
+            status=status.HTTP_200_OK,
+        )
+
 
 class IndicadorViewSet(AuditoriaModelViewSetMixin, viewsets.ModelViewSet):
     """
     API REST para gestionar indicadores y registrar avances de medición.
     """
 
-    queryset = Indicador.objects.select_related("meta", "meta__plan").all()
+    queryset = (
+        Indicador.objects.select_related(
+            "meta",
+            "meta__plan",
+            "meta__plan__entidad",
+            "meta__objetivo_estrategico",
+            "meta__objetivo_estrategico__entidad",
+            "validado_por",
+        )
+        .prefetch_related(
+            "avances__registrado_por",
+            Prefetch(
+                "meta__objetivo_estrategico__alineaciones",
+                queryset=Alineacion.objects.select_related(
+                    "objetivo_pnd__eje",
+                    "ods",
+                    "usuario_creador",
+                    "usuario_validador",
+                ),
+            ),
+        )
+        .all()
+    )
     serializer_class = IndicadorSerializer
     permission_classes = [IsAuthenticated, HasSipeipPermission]
     permission_map = {
@@ -353,6 +457,7 @@ class IndicadorViewSet(AuditoriaModelViewSetMixin, viewsets.ModelViewSet):
         "activar": "indicadores.editar",
         "desactivar": "indicadores.editar",
         "validar": "indicadores.validar",
+        "seguimiento": "indicadores.ver",
     }
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = [
@@ -427,6 +532,9 @@ class IndicadorViewSet(AuditoriaModelViewSetMixin, viewsets.ModelViewSet):
         self._validar_meta_editable(meta)
         _validar_alcance_plan(serializer, plan)
         serializer.validated_data["meta"] = meta
+        serializer.validated_data["valor_actual"] = (
+            serializer.validated_data["valor_base"]
+        )
         super().perform_create(serializer)
 
     @staticmethod
@@ -599,6 +707,20 @@ class IndicadorViewSet(AuditoriaModelViewSetMixin, viewsets.ModelViewSet):
 
         if conflicto is not None:
             return conflicto
+        if indicador.meta.plan.estado not in {
+            Plan.EstadoPlan.BORRADOR,
+            Plan.EstadoPlan.DEVUELTO,
+            Plan.EstadoPlan.RECHAZADO,
+        }:
+            return Response(
+                {
+                    "detail": (
+                        "Solo se puede activar un indicador dentro de un plan "
+                        "editable."
+                    )
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
         if indicador.activo:
             return Response(
                 {"detail": "El indicador ya se encuentra activo."},
@@ -630,6 +752,20 @@ class IndicadorViewSet(AuditoriaModelViewSetMixin, viewsets.ModelViewSet):
         indicador_autorizado = self.get_object()
         indicador = self._obtener_instancia_bloqueada(indicador_autorizado)
         self._bloquear_jerarquia(indicador)
+        if indicador.meta.plan.estado not in {
+            Plan.EstadoPlan.BORRADOR,
+            Plan.EstadoPlan.DEVUELTO,
+            Plan.EstadoPlan.RECHAZADO,
+        }:
+            return Response(
+                {
+                    "detail": (
+                        "Solo se puede desactivar un indicador dentro de un "
+                        "plan editable."
+                    )
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
         if not indicador.activo:
             return Response(
                 {"detail": "El indicador ya se encuentra inactivo."},
@@ -656,6 +792,30 @@ class IndicadorViewSet(AuditoriaModelViewSetMixin, viewsets.ModelViewSet):
         indicador_autorizado = self.get_object()
         indicador = self._obtener_instancia_bloqueada(indicador_autorizado)
         self._bloquear_jerarquia(indicador)
+        plan = indicador.meta.plan
+        if plan.estado != Plan.EstadoPlan.EN_REVISION_INICIADA:
+            return Response(
+                {
+                    "detail": (
+                        "El indicador solo puede validarse durante una revisión "
+                        "iniciada del plan."
+                    )
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+        if not (request.user.is_superuser and request.user.is_active) and (
+            plan.revisor_id != request.user.pk
+        ):
+            return Response(
+                {
+                    "code": "revision_asignada",
+                    "detail": (
+                        "Solo el supervisor asignado a la revisión puede "
+                        "validar sus indicadores."
+                    ),
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
         if indicador.validado:
             return Response(
                 {"detail": "El indicador ya se encuentra validado."},
@@ -691,6 +851,49 @@ class IndicadorViewSet(AuditoriaModelViewSetMixin, viewsets.ModelViewSet):
             antes=antes,
         )
         return Response(self.get_serializer(indicador).data)
+
+    @action(detail=True, methods=["get"])
+    def seguimiento(self, request, pk=None):
+        """Expone la medición, el historial y la alineación del indicador."""
+
+        indicador = self.get_object()
+        plan = indicador.meta.plan
+        seguimiento = calcular_seguimiento_indicador(indicador)
+        alineaciones = (
+            indicador.meta.objetivo_estrategico.alineaciones.all()
+        )
+        return Response(
+            {
+                "indicador": self.get_serializer(indicador).data,
+                "meta": MetaSerializer(
+                    indicador.meta,
+                    context=self.get_serializer_context(),
+                ).data,
+                "plan": {
+                    "id": plan.pk,
+                    "nombre": plan.nombre,
+                    "estado": plan.estado,
+                    "revisor": plan.revisor_id,
+                    "entidad": {
+                        "id": plan.entidad_id,
+                        "codigo_oficial": plan.entidad.codigo_oficial,
+                        "nombre": plan.entidad.nombre,
+                    },
+                },
+                "alineaciones": AlineacionSerializer(
+                    alineaciones,
+                    many=True,
+                    context=self.get_serializer_context(),
+                ).data,
+                "avances": AvanceIndicadorSerializer(
+                    indicador.avances.all(),
+                    many=True,
+                    context=self.get_serializer_context(),
+                ).data,
+                **seguimiento,
+            },
+            status=status.HTTP_200_OK,
+        )
 
 
 class AvanceIndicadorViewSet(viewsets.ReadOnlyModelViewSet):

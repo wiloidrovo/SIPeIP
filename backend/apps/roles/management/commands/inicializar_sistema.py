@@ -272,6 +272,13 @@ class Command(BaseCommand):
                 "creado_por": usuarios["administrador"],
                 "estado": Plan.EstadoPlan.EN_REVISION,
                 "activo": True,
+                "fecha_envio_revision": timezone.make_aware(
+                    datetime(2026, 4, 1, 9, 0)
+                ),
+                "revisor": None,
+                "fecha_inicio_revision": None,
+                "aprobado_por": None,
+                "fecha_aprobacion": None,
             },
         )
         plan_ministerio = _actualizar_o_crear(
@@ -291,6 +298,17 @@ class Command(BaseCommand):
                 "creado_por": usuarios["planificador"],
                 "estado": Plan.EstadoPlan.APROBADO,
                 "activo": True,
+                "fecha_envio_revision": timezone.make_aware(
+                    datetime(2026, 3, 25, 9, 0)
+                ),
+                "revisor": usuarios["supervisor"],
+                "fecha_inicio_revision": timezone.make_aware(
+                    datetime(2026, 4, 1, 9, 0)
+                ),
+                "aprobado_por": usuarios["supervisor"],
+                "fecha_aprobacion": timezone.make_aware(
+                    datetime(2026, 4, 3, 15, 0)
+                ),
             },
         )
 
@@ -309,7 +327,7 @@ class Command(BaseCommand):
                 "Mejorar la capacidad de gestión institucional",
                 "Porcentaje de procesos institucionales optimizados",
                 usuarios["planificador"],
-                None,
+                usuarios["supervisor"],
                 Decimal("48.00"),
                 objetivos["ministerio"],
             ),
@@ -348,6 +366,8 @@ class Command(BaseCommand):
                     "valor_meta": Decimal("80.00"),
                     "valor_actual": valor,
                     "frecuencia": Indicador.FrecuenciaMedicion.TRIMESTRAL,
+                    "sentido": Indicador.SentidoMedicion.ASCENDENTE,
+                    "ponderacion": Decimal("100.00"),
                     "activo": True,
                     "validado": validador is not None,
                     "validado_por": validador,
@@ -364,6 +384,7 @@ class Command(BaseCommand):
                 {
                     "valor": valor,
                     "observacion": "Corte semestral del indicador institucional.",
+                    "evidencia": "Registro demostrativo de corte semestral.",
                     "registrado_por": registrador,
                 },
             )

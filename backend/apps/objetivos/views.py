@@ -1,5 +1,5 @@
 from django.db import transaction
-from django.db.models import Count
+from django.db.models import Count, Prefetch, Subquery
 from django.db.models.deletion import ProtectedError
 from rest_framework import filters, status, viewsets
 from rest_framework.decorators import action
@@ -11,10 +11,12 @@ from apps.auditoria.services import (
     registrar_evento,
     serializar_instancia,
 )
-from apps.configuracion.scope import filtrar_queryset_por_entidad
+from apps.metas.models import Meta
+from apps.planes.models import Plan
 from apps.roles.permissions import HasSipeipPermission
 
 from .models import Alineacion, EjePND, EstadoCatalogo, ObjetivoEstrategico, ObjetivoPND, ODS
+from .scope import filtrar_alineaciones_por_alcance, filtrar_objetivos_por_alcance
 from .serializers import (
     AlineacionSerializer,
     EjePNDSerializer,
@@ -22,6 +24,91 @@ from .serializers import (
     ObjetivoPNDSerializer,
     ODSSerializer,
 )
+
+
+ESTADOS_EXPEDIENTE_INMUTABLE = frozenset(
+    {
+        Plan.EstadoPlan.EN_REVISION,
+        Plan.EstadoPlan.EN_REVISION_INICIADA,
+        Plan.EstadoPlan.APROBADO,
+        Plan.EstadoPlan.ARCHIVADO,
+    }
+)
+
+
+def _respuesta_expediente_inmutable(plan):
+    return Response(
+        {
+            "code": "expediente_inmutable",
+            "detail": (
+                "No se puede modificar este registro porque forma parte del "
+                f"expediente «{plan.nombre}» en estado {plan.estado}. "
+                "Devuelva el plan a edición o cree una nueva versión del "
+                "catálogo para preservar la decisión y su trazabilidad."
+            ),
+            "plan_id": plan.pk,
+            "plan_estado": plan.estado,
+        },
+        status=status.HTTP_409_CONFLICT,
+    )
+
+
+def _primer_plan_bloqueado(**filtros):
+    """Bloquea un plan relacionado sin combinar FOR UPDATE con DISTINCT.
+
+    PostgreSQL no admite ``SELECT ... FOR UPDATE`` cuando el SELECT exterior
+    contiene ``DISTINCT``. Las relaciones inversas pueden duplicar planes, por
+    lo que primero se deduplican sus identificadores en una subconsulta y luego
+    se bloquea la fila real del plan en la consulta exterior.
+    """
+
+    planes_relacionados = (
+        Plan.objects.filter(**filtros)
+        .values("pk")
+        .distinct()
+    )
+    return (
+        Plan.objects.select_for_update()
+        .filter(pk__in=Subquery(planes_relacionados))
+        .order_by("pk")
+        .first()
+    )
+
+
+class ExpedienteInmutableMixin:
+    """Impide alterar catálogos consumidos por expedientes no editables."""
+
+    plan_lookup_bloqueo = None
+
+    def _primer_plan_bloqueado(self, instancia):
+        if not self.plan_lookup_bloqueo:
+            return None
+        return _primer_plan_bloqueado(
+            **{
+                self.plan_lookup_bloqueo: instancia,
+                "estado__in": ESTADOS_EXPEDIENTE_INMUTABLE,
+            }
+        )
+
+    def _verificar_expediente_mutable(self, instancia):
+        plan = self._primer_plan_bloqueado(instancia)
+        return _respuesta_expediente_inmutable(plan) if plan else None
+
+    @transaction.atomic
+    def update(self, request, *args, **kwargs):
+        instancia = self.get_object()
+        conflicto = self._verificar_expediente_mutable(instancia)
+        if conflicto is not None:
+            return conflicto
+        return super().update(request, *args, **kwargs)
+
+    @transaction.atomic
+    def destroy(self, request, *args, **kwargs):
+        instancia = self.get_object()
+        conflicto = self._verificar_expediente_mutable(instancia)
+        if conflicto is not None:
+            return conflicto
+        return super().destroy(request, *args, **kwargs)
 
 
 class EliminacionProtegidaMixin:
@@ -51,6 +138,11 @@ class AccionesEstadoCatalogoMixin:
     @transaction.atomic
     def _cambiar_estado_catalogo(self, nuevo_estado, accion_auditoria):
         instancia_autorizada = self.get_object()
+        verificar = getattr(self, "_verificar_expediente_mutable", None)
+        if verificar is not None:
+            conflicto = verificar(instancia_autorizada)
+            if conflicto is not None:
+                return conflicto
         instancia = self._obtener_instancia_bloqueada(instancia_autorizada)
         if instancia.estado == nuevo_estado:
             etiqueta = dict(EstadoCatalogo.choices)[nuevo_estado].lower()
@@ -74,11 +166,13 @@ class AccionesEstadoCatalogoMixin:
 
 
 class ObjetivoEstrategicoViewSet(
+    ExpedienteInmutableMixin,
     EliminacionProtegidaMixin,
     AccionesEstadoCatalogoMixin,
     AuditoriaModelViewSetMixin,
     viewsets.ModelViewSet,
 ):
+    plan_lookup_bloqueo = "metas__objetivo_estrategico"
     serializer_class = ObjetivoEstrategicoSerializer
     permission_classes = [IsAuthenticated, HasSipeipPermission]
     permission_map = {
@@ -110,15 +204,16 @@ class ObjetivoEstrategicoViewSet(
     )
 
     def get_queryset(self):
-        queryset = ObjetivoEstrategico.objects.select_related("entidad").annotate(
-            metas_count_anotado=Count("metas", distinct=True),
-            alineaciones_count_anotado=Count("alineaciones", distinct=True),
+        queryset = (
+            ObjetivoEstrategico.objects.select_related("entidad")
+            .prefetch_related("alineaciones__ods")
+            .annotate(
+                metas_count_anotado=Count("metas", distinct=True),
+                planes_count_anotado=Count("metas__plan", distinct=True),
+                alineaciones_count_anotado=Count("alineaciones", distinct=True),
+            )
         )
-        queryset = filtrar_queryset_por_entidad(
-            queryset,
-            self.request.user,
-            "entidad",
-        )
+        queryset = filtrar_objetivos_por_alcance(queryset, self.request.user)
         entidad = self.request.query_params.get("entidad")
         estado_filtro = self.request.query_params.get("estado")
         if entidad and entidad.isdigit():
@@ -129,11 +224,15 @@ class ObjetivoEstrategicoViewSet(
 
 
 class EjePNDViewSet(
+    ExpedienteInmutableMixin,
     EliminacionProtegidaMixin,
     AccionesEstadoCatalogoMixin,
     AuditoriaModelViewSetMixin,
     viewsets.ModelViewSet,
 ):
+    plan_lookup_bloqueo = (
+        "metas__objetivo_estrategico__alineaciones__objetivo_pnd__eje"
+    )
     queryset = EjePND.objects.all()
     serializer_class = EjePNDSerializer
     permission_classes = [IsAuthenticated, HasSipeipPermission]
@@ -173,11 +272,15 @@ class EjePNDViewSet(
 
 
 class ObjetivoPNDViewSet(
+    ExpedienteInmutableMixin,
     EliminacionProtegidaMixin,
     AccionesEstadoCatalogoMixin,
     AuditoriaModelViewSetMixin,
     viewsets.ModelViewSet,
 ):
+    plan_lookup_bloqueo = (
+        "metas__objetivo_estrategico__alineaciones__objetivo_pnd"
+    )
     serializer_class = ObjetivoPNDSerializer
     permission_classes = [IsAuthenticated, HasSipeipPermission]
     permission_map = {
@@ -219,11 +322,13 @@ class ObjetivoPNDViewSet(
 
 
 class ODSViewSet(
+    ExpedienteInmutableMixin,
     EliminacionProtegidaMixin,
     AccionesEstadoCatalogoMixin,
     AuditoriaModelViewSetMixin,
     viewsets.ModelViewSet,
 ):
+    plan_lookup_bloqueo = "metas__objetivo_estrategico__alineaciones__ods"
     queryset = ODS.objects.all()
     serializer_class = ODSSerializer
     permission_classes = [IsAuthenticated, HasSipeipPermission]
@@ -304,6 +409,15 @@ class AlineacionViewSet(
         "No se puede eliminar la alineación porque mantiene registros trazables."
     )
 
+    def _verificar_alineacion_mutable(self, alineacion):
+        plan = _primer_plan_bloqueado(
+            metas__objetivo_estrategico_id=(
+                alineacion.objetivo_estrategico_id
+            ),
+            estado__in=ESTADOS_EXPEDIENTE_INMUTABLE,
+        )
+        return _respuesta_expediente_inmutable(plan) if plan else None
+
     def get_queryset(self):
         queryset = Alineacion.objects.select_related(
             "objetivo_estrategico__entidad",
@@ -311,11 +425,15 @@ class AlineacionViewSet(
             "ods",
             "usuario_creador",
             "usuario_validador",
+        ).prefetch_related(
+            Prefetch(
+                "objetivo_estrategico__metas",
+                queryset=Meta.objects.prefetch_related("indicadores"),
+            )
         )
-        queryset = filtrar_queryset_por_entidad(
+        queryset = filtrar_alineaciones_por_alcance(
             queryset,
             self.request.user,
-            "objetivo_estrategico__entidad",
         )
 
         filtros_numericos = {
@@ -333,6 +451,25 @@ class AlineacionViewSet(
         if estado_filtro in Alineacion.EstadoAlineacion.values:
             queryset = queryset.filter(estado=estado_filtro)
         return queryset
+
+    @transaction.atomic
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        objetivo = serializer.validated_data["objetivo_estrategico"]
+        plan = _primer_plan_bloqueado(
+            metas__objetivo_estrategico=objetivo,
+            estado__in=ESTADOS_EXPEDIENTE_INMUTABLE,
+        )
+        if plan:
+            return _respuesta_expediente_inmutable(plan)
+        self.perform_create(serializer)
+        headers = self.get_success_headers(serializer.data)
+        return Response(
+            serializer.data,
+            status=status.HTTP_201_CREATED,
+            headers=headers,
+        )
 
     @transaction.atomic
     def perform_create(self, serializer):
@@ -363,6 +500,11 @@ class AlineacionViewSet(
     @transaction.atomic
     def update(self, request, *args, **kwargs):
         alineacion_autorizada = self.get_object()
+        conflicto = self._verificar_alineacion_mutable(
+            alineacion_autorizada
+        )
+        if conflicto is not None:
+            return conflicto
         alineacion = Alineacion.objects.select_for_update().get(
             pk=alineacion_autorizada.pk
         )
@@ -376,6 +518,11 @@ class AlineacionViewSet(
     @transaction.atomic
     def destroy(self, request, *args, **kwargs):
         alineacion_autorizada = self.get_object()
+        conflicto = self._verificar_alineacion_mutable(
+            alineacion_autorizada
+        )
+        if conflicto is not None:
+            return conflicto
         alineacion = Alineacion.objects.select_for_update().get(
             pk=alineacion_autorizada.pk
         )
@@ -407,7 +554,15 @@ class AlineacionViewSet(
     @action(detail=True, methods=["post"])
     def reabrir(self, request, pk=None):
         with transaction.atomic():
-            alineacion = self._obtener_bloqueada()
+            alineacion_autorizada = self.get_object()
+            conflicto = self._verificar_alineacion_mutable(
+                alineacion_autorizada
+            )
+            if conflicto is not None:
+                return conflicto
+            alineacion = self._obtener_instancia_bloqueada(
+                alineacion_autorizada
+            )
             if alineacion.estado != Alineacion.EstadoAlineacion.RECHAZADA:
                 return Response(
                     {
@@ -451,6 +606,29 @@ class AlineacionViewSet(
                     },
                     status=status.HTTP_409_CONFLICT,
                 )
+
+            if not (
+                self.request.user.is_superuser
+                and self.request.user.is_active
+            ):
+                revision_asignada = Plan.objects.filter(
+                    metas__objetivo_estrategico=(
+                        alineacion.objetivo_estrategico
+                    ),
+                    estado=Plan.EstadoPlan.EN_REVISION_INICIADA,
+                    revisor=self.request.user,
+                ).exists()
+                if not revision_asignada:
+                    return Response(
+                        {
+                            "code": "revision_asignada",
+                            "detail": (
+                                "La alineación solo puede resolverla el "
+                                "supervisor asignado a la revisión del plan."
+                            ),
+                        },
+                        status=status.HTTP_409_CONFLICT,
+                    )
 
             if (
                 alineacion.objetivo_estrategico.estado != EstadoCatalogo.ACTIVO

@@ -3,9 +3,11 @@ from rest_framework.exceptions import PermissionDenied
 
 from apps.configuracion.models import EntidadInstitucional
 from apps.configuracion.scope import usuario_puede_acceder_entidad
+from apps.metas.services import calcular_seguimiento_plan
 from apps.usuarios.models import Usuario
 
 from .models import HistorialEstadoPlan, Plan
+from .services import evaluar_integridad_plan
 
 
 class HistorialEstadoPlanSerializer(serializers.ModelSerializer):
@@ -80,8 +82,17 @@ class PlanSerializer(serializers.ModelSerializer):
     responsable_detalle = serializers.SerializerMethodField()
     entidad_detalle = serializers.SerializerMethodField()
     creado_por_detalle = serializers.SerializerMethodField()
+    revisor_detalle = serializers.SerializerMethodField()
+    aprobado_por_detalle = serializers.SerializerMethodField()
     historial_count = serializers.SerializerMethodField()
     ultima_observacion = serializers.SerializerMethodField()
+    objetivos_count = serializers.SerializerMethodField()
+    ods_count = serializers.SerializerMethodField()
+    progreso = serializers.SerializerMethodField()
+    estado_seguimiento = serializers.SerializerMethodField()
+    etiqueta_estado_seguimiento = serializers.SerializerMethodField()
+    proxima_medicion = serializers.SerializerMethodField()
+    validacion_resumen = serializers.SerializerMethodField()
 
     class Meta:
         model = Plan
@@ -97,10 +108,24 @@ class PlanSerializer(serializers.ModelSerializer):
             "responsable_detalle",
             "creado_por",
             "creado_por_detalle",
+            "revisor",
+            "revisor_detalle",
+            "aprobado_por",
+            "aprobado_por_detalle",
             "historial_count",
             "ultima_observacion",
+            "objetivos_count",
+            "ods_count",
+            "progreso",
+            "estado_seguimiento",
+            "etiqueta_estado_seguimiento",
+            "proxima_medicion",
+            "validacion_resumen",
             "estado",
             "activo",
+            "fecha_envio_revision",
+            "fecha_inicio_revision",
+            "fecha_aprobacion",
             "fecha_creacion",
             "fecha_actualizacion",
         ]
@@ -110,10 +135,24 @@ class PlanSerializer(serializers.ModelSerializer):
             "entidad_detalle",
             "creado_por",
             "creado_por_detalle",
+            "revisor",
+            "revisor_detalle",
+            "aprobado_por",
+            "aprobado_por_detalle",
             "historial_count",
             "ultima_observacion",
+            "objetivos_count",
+            "ods_count",
+            "progreso",
+            "estado_seguimiento",
+            "etiqueta_estado_seguimiento",
+            "proxima_medicion",
+            "validacion_resumen",
             "estado",
             "activo",
+            "fecha_envio_revision",
+            "fecha_inicio_revision",
+            "fecha_aprobacion",
             "fecha_creacion",
             "fecha_actualizacion",
         ]
@@ -154,6 +193,22 @@ class PlanSerializer(serializers.ModelSerializer):
             or obj.creado_por.username,
         }
 
+    @staticmethod
+    def _resumen_usuario(usuario):
+        if usuario is None:
+            return None
+        return {
+            "id": usuario.pk,
+            "username": usuario.username,
+            "nombre_completo": usuario.get_full_name().strip() or usuario.username,
+        }
+
+    def get_revisor_detalle(self, obj):
+        return self._resumen_usuario(obj.revisor)
+
+    def get_aprobado_por_detalle(self, obj):
+        return self._resumen_usuario(obj.aprobado_por)
+
     def get_historial_count(self, obj):
         return len(obj.historial_estados.all())
 
@@ -165,6 +220,61 @@ class PlanSerializer(serializers.ModelSerializer):
             "accion": evento.accion,
             "observacion": evento.observacion,
             "fecha": evento.fecha,
+        }
+
+    def _metas(self, obj):
+        cache = getattr(obj, "_metas_serializer", None)
+        if cache is None:
+            cache = list(obj.metas.all())
+            obj._metas_serializer = cache
+        return cache
+
+    def get_objetivos_count(self, obj):
+        return len(
+            {
+                meta.objetivo_estrategico_id
+                for meta in self._metas(obj)
+                if meta.objetivo_estrategico_id is not None
+            }
+        )
+
+    def get_ods_count(self, obj):
+        return len(
+            {
+                alineacion.ods_id
+                for meta in self._metas(obj)
+                for alineacion in (
+                    meta.objetivo_estrategico.alineaciones.all()
+                )
+            }
+        )
+
+    def _seguimiento(self, obj):
+        cache = getattr(obj, "_seguimiento_serializer", None)
+        if cache is None:
+            cache = calcular_seguimiento_plan(obj)
+            obj._seguimiento_serializer = cache
+        return cache
+
+    def get_progreso(self, obj):
+        return float(self._seguimiento(obj)["progreso"])
+
+    def get_estado_seguimiento(self, obj):
+        return self._seguimiento(obj)["estado_seguimiento"]
+
+    def get_etiqueta_estado_seguimiento(self, obj):
+        return self._seguimiento(obj)["etiqueta_estado_seguimiento"]
+
+    def get_proxima_medicion(self, obj):
+        return self._seguimiento(obj)["proxima_medicion"]
+
+    def get_validacion_resumen(self, obj):
+        evaluacion = evaluar_integridad_plan(obj, self._metas(obj))
+        return {
+            "listo_para_revision": evaluacion["listo_para_revision"],
+            "listo_para_aprobacion": evaluacion["listo_para_aprobacion"],
+            "bloqueos_revision": len(evaluacion["bloqueos_revision"]),
+            "bloqueos_aprobacion": len(evaluacion["bloqueos_aprobacion"]),
         }
 
     def validate_entidad(self, value):

@@ -13,6 +13,13 @@ from apps.configuracion.scope import (
 )
 from apps.planes.scope import filtrar_queryset_por_alcance_plan
 from apps.reportes.datasets import DATASETS
+from apps.metas.services import (
+    ESTADO_CUMPLIDO,
+    ESTADO_EN_RIESGO,
+    ESTADO_INCUMPLIDO,
+    calcular_seguimiento_indicador,
+    calcular_seguimiento_plan,
+)
 
 
 def _planes_visibles(usuario):
@@ -30,6 +37,42 @@ def _widget(codigo, titulo, valor, ruta, detalle=""):
         "valor": valor,
         "detalle": detalle,
         "ruta": ruta,
+    }
+
+
+def _resumen_planes_aprobados(planes):
+    aprobados = list(
+        planes.filter(estado="APROBADO").prefetch_related(
+            "metas__indicadores__avances"
+        )
+    )
+    seguimientos = [calcular_seguimiento_plan(plan) for plan in aprobados]
+    return {
+        "total": len(aprobados),
+        "en_riesgo": sum(
+            item["estado_seguimiento"]
+            in {ESTADO_EN_RIESGO, ESTADO_INCUMPLIDO}
+            for item in seguimientos
+        ),
+    }
+
+
+def _resumen_indicadores(indicadores):
+    items = list(indicadores.prefetch_related("avances"))
+    seguimientos = [
+        calcular_seguimiento_indicador(indicador)
+        for indicador in items
+    ]
+    return {
+        "cumplidos": sum(
+            item["estado_seguimiento"] == ESTADO_CUMPLIDO
+            for item in seguimientos
+        ),
+        "en_riesgo": sum(
+            item["estado_seguimiento"]
+            in {ESTADO_EN_RIESGO, ESTADO_INCUMPLIDO}
+            for item in seguimientos
+        ),
     }
 
 
@@ -83,11 +126,24 @@ def _widgets_administracion(usuario, permisos):
 def _widgets_planificacion(usuario, permisos, planes):
     widgets = []
     if "planes.ver" in permisos:
+        resumen_aprobados = _resumen_planes_aprobados(planes)
         widgets.extend(
             [
                 _widget("planes_borrador", "Planes en borrador", planes.filter(estado="BORRADOR").count(), "/planes"),
                 _widget("planes_revision", "Planes enviados a revisión", planes.filter(estado="EN_REVISION").count(), "/planes"),
                 _widget("planes_devueltos", "Planes devueltos", planes.filter(estado="DEVUELTO").count(), "/planes"),
+                _widget(
+                    "planes_aprobados_seguimiento",
+                    "Planes aprobados en seguimiento",
+                    resumen_aprobados["total"],
+                    "/planes",
+                ),
+                _widget(
+                    "planes_en_riesgo",
+                    "Planes aprobados en riesgo",
+                    resumen_aprobados["en_riesgo"],
+                    "/planes",
+                ),
             ]
         )
     if "metas.ver" in permisos:
@@ -109,11 +165,22 @@ def _widgets_planificacion(usuario, permisos, planes):
     if "indicadores.ver" in permisos:
         Indicador = apps.get_model("metas", "Indicador")
         indicadores = Indicador.objects.filter(meta__plan__in=planes)
+        resumen_indicadores = _resumen_indicadores(
+            indicadores.filter(activo=True)
+        )
         widgets.append(
             _widget(
                 "indicadores_pendientes",
                 "Indicadores por validar",
                 indicadores.filter(validado=False, activo=True).count(),
+                "/indicadores",
+            )
+        )
+        widgets.append(
+            _widget(
+                "indicadores_cumplidos",
+                "Indicadores cumplidos",
+                resumen_indicadores["cumplidos"],
                 "/indicadores",
             )
         )
@@ -130,6 +197,7 @@ def _widgets_planificacion(usuario, permisos, planes):
 def _widgets_supervision(usuario, permisos, planes):
     widgets = []
     if "planes.ver" in permisos:
+        resumen_aprobados = _resumen_planes_aprobados(planes)
         widgets.extend(
             [
                 _widget("bandeja_revision", "Planes por revisar", planes.filter(estado="EN_REVISION").count(), "/planes"),
@@ -145,15 +213,40 @@ def _widgets_supervision(usuario, permisos, planes):
                     planes.filter(estado__in=["DEVUELTO", "RECHAZADO"]).count(),
                     "/planes",
                 ),
+                _widget(
+                    "planes_aprobados_seguimiento",
+                    "Planes aprobados en seguimiento",
+                    resumen_aprobados["total"],
+                    "/planes",
+                ),
+                _widget(
+                    "planes_en_riesgo",
+                    "Planes aprobados en riesgo",
+                    resumen_aprobados["en_riesgo"],
+                    "/planes",
+                ),
             ]
         )
     if "indicadores.ver" in permisos:
         Indicador = apps.get_model("metas", "Indicador")
+        indicadores = Indicador.objects.filter(
+            meta__plan__in=planes,
+            activo=True,
+        )
+        resumen_indicadores = _resumen_indicadores(indicadores)
         widgets.append(
             _widget(
                 "indicadores_pendientes",
                 "Indicadores por validar",
-                Indicador.objects.filter(meta__plan__in=planes, validado=False, activo=True).count(),
+                indicadores.filter(validado=False).count(),
+                "/indicadores",
+            )
+        )
+        widgets.append(
+            _widget(
+                "indicadores_en_riesgo",
+                "Indicadores en riesgo",
+                resumen_indicadores["en_riesgo"],
                 "/indicadores",
             )
         )
@@ -251,6 +344,6 @@ class DashboardView(APIView):
                     if entidad
                     else None
                 ),
-                "widgets": widgets[:8],
+                "widgets": widgets[:10],
             }
         )

@@ -1,9 +1,11 @@
+import { Link } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
 import { ResourcePage, optionsFrom } from "../../components/ResourcePage";
 import type {
   SelectFilterContext,
   SelectOption,
 } from "../../components/ResourcePage";
+import { OdsBadges, TrackingStatus } from "../../components/TrackingStatus";
 
 const entities = optionsFrom(
   "/configuracion/entidades/",
@@ -31,15 +33,8 @@ function matchesSelectedEntity(
   return Boolean(entityId && optionEntityId(option) === entityId);
 }
 
-function renderHistory(result: unknown) {
-  if (!Array.isArray(result) || result.length === 0) {
-    return <p className="muted">El plan todavía no registra transiciones de estado.</p>;
-  }
-  return <div className="table-scroll"><table><thead><tr><th>Fecha</th><th>Acción</th><th>Transición</th><th>Responsable</th><th>Observación</th></tr></thead><tbody>{result.map((value, index) => {
-    const item = value && typeof value === "object" ? value as Record<string, unknown> : {};
-    const user = item.usuario_detalle && typeof item.usuario_detalle === "object" ? item.usuario_detalle as Record<string, unknown> : {};
-    return <tr key={String(item.id ?? index)}><td>{new Date(String(item.fecha)).toLocaleString("es-EC")}</td><td>{String(item.accion ?? "")}</td><td>{String(item.estado_anterior ?? "").replaceAll("_", " ")} → {String(item.estado_nuevo ?? "").replaceAll("_", " ")}</td><td>{String(user.nombre_completo ?? user.username ?? "")}</td><td>{String(item.observacion || "Sin observación")}</td></tr>;
-  })}</tbody></table></div>;
+function alignmentValue(item: Record<string, unknown>) {
+  return item.alineaciones ?? item.ods_resumen ?? item.ods ?? [];
 }
 
 export function PlanesPage() {
@@ -48,7 +43,7 @@ export function PlanesPage() {
   const hasInstitutionalScope = Boolean(
     user?.institucion && !["GLOBAL", "TOTAL"].includes(scope ?? ""),
   );
-  return <ResourcePage eyebrow="Planificación" title="Planes institucionales" description="Cree planes y gestione su revisión mediante acciones definidas para cada etapa." apiPath="/planes/" viewPermission="planes.ver" createPermission="planes.crear" editPermission="planes.editar" deletePermission="planes.eliminar" initialValues={{ responsable: "", entidad: "" }} fields={[
+  return <ResourcePage eyebrow="Planificación" title="Planes institucionales" description="Cree planes, abra su expediente y gestione cada etapa mediante acciones autorizadas." apiPath="/planes/" viewPermission="planes.ver" createPermission="planes.crear" editPermission="planes.editar" deletePermission="planes.eliminar" initialValues={{ responsable: "", entidad: "" }} fields={[
     {
       name: "entidad",
       label: "Entidad",
@@ -79,16 +74,50 @@ export function PlanesPage() {
         : "Seleccione primero una entidad.",
     }] : []),
   ]} columns={[
-    { key: "nombre", label: "Plan" }, { key: "entidad_detalle.nombre", label: "Entidad" }, { key: "responsable_detalle.nombre_completo", label: "Responsable" }, { key: "periodo_inicio", label: "Inicio" }, { key: "periodo_fin", label: "Fin" }, { key: "estado", label: "Estado" },
+    {
+      key: "nombre",
+      label: "Plan",
+      render: (item) => (
+        <span>
+          <Link className="table-primary-link" to={`/planes/${item.id}`}>
+            {String(item.nombre)}
+          </Link>
+          <small className="table-detail">Abrir expediente completo</small>
+        </span>
+      ),
+    },
+    { key: "entidad_detalle.nombre", label: "Entidad" },
+    { key: "responsable_detalle.nombre_completo", label: "Responsable" },
+    { key: "estado", label: "Estado" },
+    {
+      key: "progreso",
+      label: "Cumplimiento",
+      render: (item) => (
+        <TrackingStatus
+          compact
+          progress={item.progreso}
+          status={String(item.estado_seguimiento ?? "")}
+          label={typeof item.etiqueta_estado_seguimiento === "string" ? item.etiqueta_estado_seguimiento : undefined}
+        />
+      ),
+    },
+    {
+      key: "ods_resumen",
+      label: "ODS",
+      render: (item) => {
+        const alignments = alignmentValue(item);
+        if (Array.isArray(alignments) && alignments.length) {
+          return <OdsBadges value={alignments} />;
+        }
+        const count = Number(item.ods_count ?? 0);
+        return count > 0 ? (
+          <span className="data-tag">{count} ODS vinculado{count === 1 ? "" : "s"}</span>
+        ) : <span className="muted">Sin ODS asociado</span>;
+      },
+    },
   ]} actions={[
-    { key: "enviar-a-revision", label: "Enviar a revisión", permission: "planes.enviar_revision", states: ["BORRADOR", "DEVUELTO", "RECHAZADO"], tone: "success", confirm: "El plan saldrá de edición ordinaria y quedará disponible para revisión." },
-    { key: "revisar", label: "Iniciar revisión", permission: "planes.revisar", states: ["EN_REVISION"] },
-    { key: "devolver", label: "Devolver", permission: "planes.devolver", states: ["EN_REVISION_INICIADA"], tone: "danger", formFields: [{ name: "observacion", label: "Observación para correcciones", type: "textarea", required: true }] },
-    { key: "aprobar", label: "Aprobar", permission: "planes.aprobar", states: ["EN_REVISION_INICIADA"], tone: "success", confirm: "Confirme la aprobación institucional del plan." },
-    { key: "rechazar", label: "Rechazar", permission: "planes.rechazar", states: ["EN_REVISION_INICIADA"], tone: "danger", formFields: [{ name: "observacion", label: "Motivo del rechazo", type: "textarea", required: true }] },
     { key: "archivar", label: "Archivar", permission: "planes.archivar", states: ["BORRADOR", "DEVUELTO", "RECHAZADO"], tone: "danger", confirm: "El plan quedará inactivo y archivado, conservando su trazabilidad." },
     { key: "archivar-aprobado", endpoint: "archivar", label: "Archivar", permission: "planes.archivar", allPermissions: ["planes.aprobar"], states: ["APROBADO"], tone: "danger", confirm: "El plan aprobado quedará inactivo y archivado, conservando toda su trazabilidad." },
-    { key: "historial", label: "Ver historial", permission: "planes.ver", method: "GET", resultTitle: "Historial de estados del plan", renderResult: renderHistory },
   ]} extraContent={hasInstitutionalScope ? (
     <section className="panel dashboard-guidance" aria-label="Ámbito de los planes">
       <div>

@@ -45,9 +45,12 @@ class IndicadorAdmin(admin.ModelAdmin):
         "valor_actual",
         "valor_meta",
         "frecuencia",
+        "sentido",
+        "ponderacion",
+        "validado",
         "activo",
     )
-    list_filter = ("frecuencia", "activo")
+    list_filter = ("frecuencia", "sentido", "validado", "activo")
     search_fields = ("nombre", "descripcion", "meta__nombre")
     ordering = ("-fecha_creacion",)
 
@@ -56,7 +59,13 @@ class IndicadorAdmin(admin.ModelAdmin):
 class AvanceIndicadorAdmin(admin.ModelAdmin):
     """Configuración administrativa para avances de indicadores."""
 
-    list_display = ("indicador", "fecha_registro", "valor", "registrado_por")
+    list_display = (
+        "indicador",
+        "fecha_registro",
+        "valor",
+        "evidencia",
+        "registrado_por",
+    )
     list_filter = ("fecha_registro",)
-    search_fields = ("indicador__nombre", "observacion")
+    search_fields = ("indicador__nombre", "observacion", "evidencia")
     ordering = ("-fecha_registro", "-fecha_creacion")

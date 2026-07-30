@@ -601,18 +601,23 @@ export function ResourcePage(props: ResourcePageProps) {
                     ) : null}
                   </>
                 ) : (
-                  <input
-                    type={field.type ?? "text"}
-                    required={field.required}
-                    disabled={Boolean(editing && field.readOnlyOnEdit)}
-                    min={field.min}
-                    max={field.max}
-                    step={field.step}
-                    value={String(form[field.name] ?? "")}
-                    placeholder={field.placeholder}
-                    autoComplete={field.type === "password" ? "new-password" : undefined}
-                    onChange={(event) => updateFormValue(field.name, event.target.value)}
-                  />
+                  <>
+                    <input
+                      type={field.type ?? "text"}
+                      required={field.required}
+                      disabled={Boolean(editing && field.readOnlyOnEdit)}
+                      min={field.min}
+                      max={field.max}
+                      step={field.step}
+                      value={String(form[field.name] ?? "")}
+                      placeholder={field.placeholder}
+                      autoComplete={field.type === "password" ? "new-password" : undefined}
+                      onChange={(event) => updateFormValue(field.name, event.target.value)}
+                    />
+                    {field.helpText ? (
+                      <small className="field-help">{field.helpText}</small>
+                    ) : null}
+                  </>
                 )}
               </label>
             );
@@ -625,7 +630,7 @@ export function ResourcePage(props: ResourcePageProps) {
       <ConfirmDialog open={Boolean(confirmation)} title={confirmation?.kind === "delete" ? "Confirmar eliminación" : "Confirmar acción"} detail={confirmation?.kind === "delete" ? (props.deleteWarning?.(confirmation.record) ?? "Esta operación puede afectar relaciones existentes y no se puede deshacer.") : (confirmation?.action?.confirm ?? "Confirme que desea continuar.")} confirmLabel={confirmation?.kind === "delete" ? "Eliminar" : "Continuar"} busy={saving} onCancel={() => setConfirmation(null)} onConfirm={() => void executeConfirmation()} />
       <Modal open={Boolean(actionForm)} onClose={() => setActionForm(null)} title={actionForm?.action.label ?? "Completar acción"}>
         <form className="resource-form" onSubmit={submitActionForm}>
-          {(actionForm?.action.formFields ?? []).map((field) => field.type === "checkbox" ? <label className="checkbox-field" key={field.name}><input type="checkbox" checked={Boolean(actionValues[field.name])} onChange={(event) => setActionValues((current) => ({ ...current, [field.name]: event.target.checked }))} /><span>{field.label}</span></label> : <label key={field.name}><span>{field.label}{field.required ? " *" : ""}</span>{field.type === "textarea" ? <textarea required={field.required} value={String(actionValues[field.name] ?? "")} onChange={(event) => setActionValues((current) => ({ ...current, [field.name]: event.target.value }))} /> : field.type === "select" ? <select required={field.required} value={String(actionValues[field.name] ?? "")} onChange={(event) => setActionValues((current) => ({ ...current, [field.name]: event.target.value }))}><option value="">Seleccione</option>{(options[field.name] ?? field.options ?? []).map((option) => <option disabled={option.disabled} key={String(option.value)} value={option.value}>{option.label}</option>)}</select> : <input type={field.type ?? "text"} required={field.required} min={field.min} max={field.max} step={field.step} value={String(actionValues[field.name] ?? "")} onChange={(event) => setActionValues((current) => ({ ...current, [field.name]: event.target.value }))} />}</label>)}
+          {(actionForm?.action.formFields ?? []).map((field) => field.type === "checkbox" ? <label className="checkbox-field" key={field.name}><input type="checkbox" checked={Boolean(actionValues[field.name])} onChange={(event) => setActionValues((current) => ({ ...current, [field.name]: event.target.checked }))} /><span>{field.label}</span></label> : <label key={field.name}><span>{field.label}{field.required ? " *" : ""}</span>{field.type === "textarea" ? <textarea required={field.required} placeholder={field.placeholder} value={String(actionValues[field.name] ?? "")} onChange={(event) => setActionValues((current) => ({ ...current, [field.name]: event.target.value }))} /> : field.type === "select" ? <select required={field.required} value={String(actionValues[field.name] ?? "")} onChange={(event) => setActionValues((current) => ({ ...current, [field.name]: event.target.value }))}><option value="">Seleccione</option>{(options[field.name] ?? field.options ?? []).map((option) => <option disabled={option.disabled} key={String(option.value)} value={option.value}>{option.label}</option>)}</select> : <input type={field.type ?? "text"} required={field.required} min={field.min} max={field.max} step={field.step} placeholder={field.placeholder} value={String(actionValues[field.name] ?? "")} onChange={(event) => setActionValues((current) => ({ ...current, [field.name]: event.target.value }))} />}{field.helpText ? <small className="field-help">{field.helpText}</small> : null}</label>)}
           <div className="form-actions"><button type="button" className="button button--secondary" onClick={() => setActionForm(null)}>Cancelar</button><button type="submit" className="button button--primary" disabled={saving}>{saving ? "Procesando…" : "Confirmar"}</button></div>
         </form>
       </Modal>

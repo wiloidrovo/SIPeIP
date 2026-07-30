@@ -229,7 +229,12 @@ class ODS(models.Model):
 
 
 class Alineacion(models.Model):
-    """Vincula un objetivo institucional con un objetivo PND y un ODS."""
+    """Alineación institucional reutilizable por los planes que usan el OEI.
+
+    La relación pertenece al objetivo estratégico, no a una medición aislada:
+    Plan -> Meta -> Objetivo estratégico -> PND/ODS. De ese modo, metas e
+    indicadores heredan una única alineación validada sin duplicarla por plan.
+    """
 
     class EstadoAlineacion(models.TextChoices):
         BORRADOR = "BORRADOR", "Borrador"

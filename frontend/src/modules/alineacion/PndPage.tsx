@@ -182,13 +182,39 @@ export function PndPage() {
               return `ODS ${String(ods?.numero ?? "–")} · ${String(ods?.nombre ?? "Sin detalle")}`;
             },
           },
+          {
+            key: "planes_count",
+            label: "Uso en planificación",
+            render: (item) => {
+              const plans = Array.isArray(item.planes_relacionados)
+                ? item.planes_relacionados
+                    .map(asRecord)
+                    .filter((plan): plan is Record<string, unknown> => plan !== null)
+                : [];
+              const planNames = plans
+                .map((plan) => String(plan.nombre ?? "").trim())
+                .filter(Boolean)
+                .join(", ");
+              return (
+                <span>
+                  {String(item.planes_count ?? 0)} plan{Number(item.planes_count) === 1 ? "" : "es"}
+                  <small className="table-detail">
+                    {String(item.metas_count ?? 0)} meta{Number(item.metas_count) === 1 ? "" : "s"} · {String(item.indicadores_count ?? 0)} indicador{Number(item.indicadores_count) === 1 ? "" : "es"}
+                  </small>
+                  {planNames ? (
+                    <small className="table-detail">{planNames}</small>
+                  ) : null}
+                </span>
+              );
+            },
+          },
           { key: "justificacion", label: "Justificación" },
           { key: "estado", label: "Estado" },
           { key: "usuario_validador_detalle.nombre_completo", label: "Validado por" },
         ]}
         actions={[
-          { key: "validar", label: "Validar", permission: "alineaciones.validar", states: ["BORRADOR"], tone: "success", confirm: "Confirme que la alineación está sustentada y puede validarse." },
-          { key: "rechazar", label: "Rechazar", permission: "alineaciones.validar", states: ["BORRADOR"], tone: "danger", confirm: "La alineación quedará rechazada para corrección." },
+          { key: "validar", label: "Validar", permission: "alineaciones.validar", states: ["BORRADOR"], tone: "success", confirm: "Confirme que la alineación está sustentada. La decisión se aplicará a los planes que utilizan este mismo objetivo estratégico.", canRun: (item) => item.puede_resolver === true },
+          { key: "rechazar", label: "Rechazar", permission: "alineaciones.validar", states: ["BORRADOR"], tone: "danger", confirm: "La alineación quedará rechazada para corrección.", canRun: (item) => item.puede_resolver === true },
           { key: "reabrir", label: "Reabrir", permission: "alineaciones.gestionar", states: ["RECHAZADA"] },
         ]}
         extraContent={(

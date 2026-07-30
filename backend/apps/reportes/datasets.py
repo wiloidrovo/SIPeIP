@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
 
-from django.db.models import Q
+from django.db.models import Prefetch, Q
 
 from apps.auditoria.models import EventoAuditoria
 from apps.configuracion.scope import (
@@ -10,8 +10,14 @@ from apps.configuracion.scope import (
     obtener_alcance_usuario,
 )
 from apps.metas.models import AvanceIndicador, Indicador, Meta
+from apps.metas.services import (
+    calcular_seguimiento_indicador,
+    calcular_seguimiento_plan,
+)
 from apps.objetivos.models import Alineacion
+from apps.objetivos.scope import filtrar_alineaciones_por_alcance
 from apps.planes.models import Plan
+from apps.planes.scope import filtrar_queryset_por_alcance_plan
 from apps.proyectos.models import ProyectoInversion
 from apps.usuarios.models import Usuario
 
@@ -38,6 +44,16 @@ def _texto_usuario(usuario):
     return nombre or usuario.username
 
 
+def _ods_objetivo(objetivo):
+    if objetivo is None:
+        return ""
+    return "; ".join(
+        f"ODS {alineacion.ods.numero} - {alineacion.ods.nombre}"
+        for alineacion in objetivo.alineaciones.all()
+        if alineacion.estado != "RECHAZADA"
+    )
+
+
 def _aplicar_filtro_entidad(queryset, filtros, lookup):
     entidad_id = filtros.get("entidad")
     if entidad_id:
@@ -46,7 +62,7 @@ def _aplicar_filtro_entidad(queryset, filtros, lookup):
 
 
 def _filtrar_planes_base(queryset, usuario):
-    queryset = filtrar_queryset_por_entidad(queryset, usuario, "entidad")
+    queryset = filtrar_queryset_por_alcance_plan(queryset, usuario)
     if obtener_alcance_usuario(usuario) in {"ENTIDAD", "PROPIO_ASIGNADO"}:
         queryset = queryset.filter(Q(creado_por=usuario) | Q(responsable=usuario))
     return queryset.distinct()
@@ -92,7 +108,14 @@ def usuarios_roles(usuario, filtros):
 
 
 def planes(usuario, filtros):
-    queryset = Plan.objects.select_related("entidad", "responsable", "creado_por")
+    queryset = Plan.objects.select_related(
+        "entidad",
+        "responsable",
+        "creado_por",
+    ).prefetch_related(
+        "metas__indicadores__avances",
+        "metas__objetivo_estrategico__alineaciones__ods",
+    )
     queryset = _filtrar_planes_base(queryset, usuario)
     queryset = _aplicar_filtro_entidad(queryset, filtros, "entidad")
     if filtros.get("estado"):
@@ -103,15 +126,26 @@ def planes(usuario, filtros):
         queryset, filtros.get("buscar"), ("nombre", "descripcion", "entidad__nombre")
     )
     for item in queryset.order_by("-fecha_creacion")[: filtros["limite"]]:
+        seguimiento = calcular_seguimiento_plan(item)
+        ods = {
+            texto
+            for meta in item.metas.all()
+            for texto in [_ods_objetivo(meta.objetivo_estrategico)]
+            if texto
+        }
         yield {
             "id": item.id,
             "entidad": item.entidad.nombre if item.entidad else "",
             "nombre": item.nombre,
+            "descripcion": item.descripcion,
             "periodo_inicio": item.periodo_inicio,
             "periodo_fin": item.periodo_fin,
             "responsable": _texto_usuario(item.responsable),
             "estado": item.estado,
             "activo": item.activo,
+            "progreso": seguimiento["progreso"],
+            "seguimiento": seguimiento["etiqueta_estado_seguimiento"],
+            "ods": "; ".join(sorted(ods)),
         }
 
 
@@ -139,10 +173,14 @@ def metas_indicadores(usuario, filtros):
         "meta__plan",
         "meta__plan__entidad",
         "meta__objetivo_estrategico",
+    ).prefetch_related(
+        "avances",
+        "meta__objetivo_estrategico__alineaciones__ods",
     ).filter(meta__in=metas)
     if filtros.get("activo") is not None:
         indicadores = indicadores.filter(activo=filtros["activo"])
     for item in indicadores.order_by("meta__plan__nombre", "meta__nombre", "nombre")[: filtros["limite"]]:
+        seguimiento = calcular_seguimiento_indicador(item)
         yield {
             "entidad": item.meta.plan.entidad.nombre if item.meta.plan.entidad else "",
             "plan": item.meta.plan.nombre,
@@ -160,6 +198,12 @@ def metas_indicadores(usuario, filtros):
             "valor_meta": item.valor_meta,
             "valor_actual": item.valor_actual,
             "frecuencia": item.frecuencia,
+            "sentido": item.sentido,
+            "ponderacion": item.ponderacion,
+            "progreso": seguimiento["progreso"],
+            "seguimiento": seguimiento["etiqueta_estado_seguimiento"],
+            "proxima_medicion": seguimiento["proxima_medicion"],
+            "ods": _ods_objetivo(item.meta.objetivo_estrategico),
             "activo": item.activo,
             "validado": item.validado,
         }
@@ -193,19 +237,28 @@ def avances(usuario, filtros):
             "fecha_registro": item.fecha_registro,
             "valor": item.valor,
             "observacion": item.observacion,
+            "evidencia": item.evidencia,
             "registrado_por": _texto_usuario(item.registrado_por),
         }
 
 
 def alineacion(usuario, filtros):
+    planes_visibles = _filtrar_planes_base(Plan.objects.all(), usuario)
+    metas_visibles = Meta.objects.filter(
+        plan__in=planes_visibles
+    ).prefetch_related("indicadores")
     queryset = Alineacion.objects.select_related(
         "objetivo_estrategico", "objetivo_estrategico__entidad",
         "objetivo_pnd", "objetivo_pnd__eje", "ods",
         "usuario_creador", "usuario_validador",
+    ).prefetch_related(
+        Prefetch(
+            "objetivo_estrategico__metas",
+            queryset=metas_visibles,
+            to_attr="metas_reporte_visibles",
+        )
     )
-    queryset = filtrar_queryset_por_entidad(
-        queryset, usuario, "objetivo_estrategico__entidad"
-    )
+    queryset = filtrar_alineaciones_por_alcance(queryset, usuario)
     queryset = _aplicar_filtro_entidad(
         queryset, filtros, "objetivo_estrategico__entidad"
     )
@@ -217,6 +270,9 @@ def alineacion(usuario, filtros):
         ("objetivo_estrategico__nombre", "objetivo_pnd__nombre", "ods__nombre"),
     )
     for item in queryset.order_by("-fecha_actualizacion")[: filtros["limite"]]:
+        metas_objetivo = list(
+            item.objetivo_estrategico.metas_reporte_visibles
+        )
         yield {
             "entidad": item.objetivo_estrategico.entidad.nombre,
             "objetivo_estrategico": (
@@ -229,6 +285,12 @@ def alineacion(usuario, filtros):
             "estado": item.estado,
             "creado_por": _texto_usuario(item.usuario_creador),
             "validado_por": _texto_usuario(item.usuario_validador),
+            "planes": len({meta.plan_id for meta in metas_objetivo}),
+            "metas": len(metas_objetivo),
+            "indicadores": sum(
+                meta.indicadores.count()
+                for meta in metas_objetivo
+            ),
         }
 
 
@@ -325,8 +387,11 @@ DATASETS = {
             "planes", "Planes por estado e institución", "Planes institucionales.",
             ("planes.ver",),
             (("id", "ID"), ("entidad", "Entidad"), ("nombre", "Plan"),
+             ("descripcion", "Descripción"),
              ("periodo_inicio", "Inicio"), ("periodo_fin", "Fin"),
-             ("responsable", "Responsable"), ("estado", "Estado"), ("activo", "Activo")),
+             ("responsable", "Responsable"), ("estado", "Estado"),
+             ("progreso", "Cumplimiento (%)"), ("seguimiento", "Seguimiento"),
+             ("ods", "ODS"), ("activo", "Activo")),
             planes,
             filtros=("buscar", "estado", "activo", "entidad"),
         ),
@@ -338,7 +403,11 @@ DATASETS = {
              ("estado_meta", "Estado meta"), ("indicador", "Indicador"),
              ("unidad_medida", "Unidad"), ("valor_base", "Base"),
              ("valor_meta", "Valor meta"), ("valor_actual", "Actual"),
-             ("frecuencia", "Frecuencia"), ("activo", "Activo"),
+             ("frecuencia", "Frecuencia"), ("sentido", "Sentido"),
+             ("ponderacion", "Ponderación (%)"),
+             ("progreso", "Cumplimiento (%)"), ("seguimiento", "Seguimiento"),
+             ("proxima_medicion", "Próxima medición"), ("ods", "ODS"),
+             ("activo", "Activo"),
              ("validado", "Validado")),
             metas_indicadores,
             filtros=("buscar", "estado", "activo", "entidad"),
@@ -349,6 +418,7 @@ DATASETS = {
             (("entidad", "Entidad"), ("plan", "Plan"), ("meta", "Meta"),
              ("indicador", "Indicador"), ("fecha_registro", "Fecha"),
              ("valor", "Valor"), ("observacion", "Observación"),
+             ("evidencia", "Evidencia"),
              ("registrado_por", "Registrado por")),
             avances,
             filtros=("buscar", "entidad", "fecha_desde", "fecha_hasta"),
@@ -360,7 +430,8 @@ DATASETS = {
              ("eje_pnd", "Eje PND"), ("objetivo_pnd", "Objetivo PND"),
              ("ods", "ODS"), ("justificacion", "Justificación"),
              ("estado", "Estado"), ("creado_por", "Creado por"),
-             ("validado_por", "Validado por")),
+             ("validado_por", "Validado por"), ("planes", "Planes"),
+             ("metas", "Metas"), ("indicadores", "Indicadores")),
             alineacion,
             filtros=("buscar", "estado", "entidad"),
         ),

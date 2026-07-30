@@ -8,8 +8,10 @@ import { AvancesPage } from "../modules/avances/AvancesPage";
 import { EntidadesPage } from "../modules/configuracion/EntidadesPage";
 import { UnidadesPage } from "../modules/configuracion/UnidadesPage";
 import { IndicadoresPage } from "../modules/indicadores/IndicadoresPage";
+import { IndicatorDetailPage } from "../modules/indicadores/IndicatorDetailPage";
 import { MetasPage } from "../modules/metas/MetasPage";
 import { ObjetivosPage } from "../modules/objetivos/ObjetivosPage";
+import { PlanDetailPage } from "../modules/planes/PlanDetailPage";
 import { PlanesPage } from "../modules/planes/PlanesPage";
 import { ProyectosPage } from "../modules/proyectos/ProyectosPage";
 import { ReportesPage } from "../modules/reportes/ReportesPage";
@@ -40,8 +42,10 @@ export function AppRouter() {
       {Secured({ permission: "configuracion.ver", children: <Route path="/configuracion/entidades" element={<EntidadesPage />} /> })}
       {Secured({ permission: "configuracion.ver", children: <Route path="/configuracion/unidades" element={<UnidadesPage />} /> })}
       {Secured({ permission: "planes.ver", children: <Route path="/planes" element={<PlanesPage />} /> })}
+      {Secured({ permission: "planes.ver", children: <Route path="/planes/:planId" element={<PlanDetailPage />} /> })}
       {Secured({ permission: "metas.ver", children: <Route path="/metas" element={<MetasPage />} /> })}
       {Secured({ permission: "indicadores.ver", children: <Route path="/indicadores" element={<IndicadoresPage />} /> })}
+      {Secured({ permission: "indicadores.ver", children: <Route path="/indicadores/:indicatorId" element={<IndicatorDetailPage />} /> })}
       {Secured({ permission: "indicadores.ver", children: <Route path="/avances" element={<AvancesPage />} /> })}
       {Secured({ permission: "objetivos.ver", children: <Route path="/objetivos" element={<ObjetivosPage />} /> })}
       {Secured({ permission: "alineaciones.ver", children: <Route path="/alineacion/pnd" element={<PndPage />} /> })}

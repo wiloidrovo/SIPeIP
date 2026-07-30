@@ -1,0 +1,1417 @@
+{
+  "info": {
+    "_postman_id": "5eb534e7-5b9c-4d71-9b86-cf8cc778ec23",
+    "name": "SIPeIP - Flujo funcional de planificación",
+    "description": "Caso funcional secuencial: un planificador construye un único expediente, comprueba el bloqueo de un envío incompleto, lo envía, un supervisor consulta todo su contenido y sus ODS, valida y aprueba, y finalmente se registra y consulta el seguimiento. Requiere los datos locales creados por inicializar_sistema. Complete únicamente la variable password antes de ejecutar la colección en orden. La contraseña no se guarda en este archivo.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "1. Sesión real del planificador",
+      "item": [
+        {
+          "name": "01 - Preparar CSRF para cerrar cualquier sesión previa",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const now = new Date();",
+                  "pm.collectionVariables.set('run_id', String(now.getTime()));",
+                  "pm.collectionVariables.set('fecha_avance', now.toISOString().slice(0, 10));",
+                  "pm.collectionVariables.set('fecha_inicio', new Date(Date.UTC(now.getUTCFullYear(), 0, 1)).toISOString().slice(0, 10));",
+                  "pm.collectionVariables.set('fecha_fin', new Date(Date.UTC(now.getUTCFullYear() + 1, 11, 31)).toISOString().slice(0, 10));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('CSRF preparado', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('csrf_token', pm.response.json().csrf_token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/auth/csrf/"
+          }
+        },
+        {
+          "name": "02 - Cerrar sesión previa si existe",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('La sesión previa quedó cerrada o no existía', () => pm.expect([200, 401]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRFToken",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{base_url}}/api/auth/logout/"
+          }
+        },
+        {
+          "name": "03 - Comprobar 401 sin sesión",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('La API exige autenticación', () => pm.response.to.have.status(401));",
+                  "pm.test('El error es JSON controlado', () => pm.expect(pm.response.json().code).to.eql('not_authenticated'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/planes/"
+          }
+        },
+        {
+          "name": "04 - Preparar CSRF de login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('CSRF preparado', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('csrf_token', pm.response.json().csrf_token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/auth/csrf/"
+          }
+        },
+        {
+          "name": "05 - Login como planificador",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Login de planificador correcto', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.expect(body.usuario.username).to.eql(pm.collectionVariables.get('planificador_username'));",
+                  "pm.collectionVariables.set('planificador_id', String(body.usuario.id));",
+                  "pm.collectionVariables.set('entidad_planificador_id', String(body.usuario.institucion.id));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRFToken",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{planificador_username}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{base_url}}/api/auth/login/"
+          }
+        },
+        {
+          "name": "06 - Renovar CSRF después del login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('CSRF de la sesión autenticada preparado', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('csrf_token', pm.response.json().csrf_token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/auth/csrf/"
+          }
+        },
+        {
+          "name": "07 - Localizar objetivo PND de referencia",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Catálogo PND disponible', () => pm.response.to.have.status(200));",
+                  "const payload = pm.response.json();",
+                  "const rows = Array.isArray(payload) ? payload : (payload.results || []);",
+                  "const item = rows.find(row => row.codigo === 'PND-REF-01');",
+                  "pm.expect(item, 'Debe existir PND-REF-01').to.be.an('object');",
+                  "pm.collectionVariables.set('objetivo_pnd_id', String(item.id));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/objetivos-pnd/?search=PND-REF-01&estado=ACTIVO"
+          }
+        },
+        {
+          "name": "08 - Localizar ODS 16 de referencia",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Catálogo ODS disponible', () => pm.response.to.have.status(200));",
+                  "const payload = pm.response.json();",
+                  "const rows = Array.isArray(payload) ? payload : (payload.results || []);",
+                  "const item = rows.find(row => Number(row.numero) === 16);",
+                  "pm.expect(item, 'Debe existir el ODS 16 de referencia').to.be.an('object');",
+                  "pm.collectionVariables.set('ods_id', String(item.id));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/ods/?search=16&estado=ACTIVO"
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Construcción del mismo expediente",
+      "item": [
+        {
+          "name": "09 - Crear el plan funcional",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Plan creado en borrador', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.expect(body.estado).to.eql('BORRADOR');",
+                  "pm.collectionVariables.set('plan_id', String(body.id));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRFToken",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Plan funcional Postman {{run_id}}\",\n  \"descripcion\": \"Expediente funcional con descripción suficiente para la decisión del supervisor.\",\n  \"entidad\": {{entidad_planificador_id}},\n  \"periodo_inicio\": \"{{fecha_inicio}}\",\n  \"periodo_fin\": \"{{fecha_fin}}\",\n  \"responsable\": {{planificador_id}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{base_url}}/api/planes/"
+          }
+        },
+        {
+          "name": "10 - Bloquear el envío incompleto",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('El plan incompleto no se envía', () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRFToken",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"observacion\": \"Intento intencional con expediente incompleto.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{base_url}}/api/planes/{{plan_id}}/enviar-a-revision/"
+          }
+        },
+        {
+          "name": "11 - Consultar los bloqueos del expediente",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Expediente consultado', () => pm.response.to.have.status(200));",
+                  "const validation = pm.response.json().validacion;",
+                  "pm.expect(validation.listo_para_revision).to.eql(false);",
+                  "pm.expect(validation.bloqueos).to.be.an('array').that.is.not.empty;"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/planes/{{plan_id}}/expediente/"
+          }
+        },
+        {
+          "name": "12 - Crear objetivo estratégico",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Objetivo estratégico creado', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('objetivo_id', String(pm.response.json().id));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRFToken",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"entidad\": {{entidad_planificador_id}},\n  \"codigo\": \"OEI-FUNC-{{run_id}}\",\n  \"nombre\": \"Fortalecer la gestión institucional {{run_id}}\",\n  \"descripcion\": \"Objetivo creado dentro del flujo funcional de Postman.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{base_url}}/api/objetivos-estrategicos/"
+          }
+        },
+        {
+          "name": "13 - Alinear objetivo con PND y ODS",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Alineación creada', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.expect(body.estado).to.eql('BORRADOR');",
+                  "pm.collectionVariables.set('alineacion_id', String(body.id));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRFToken",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"objetivo_estrategico\": {{objetivo_id}},\n  \"objetivo_pnd\": {{objetivo_pnd_id}},\n  \"ods\": {{ods_id}},\n  \"justificacion\": \"La meta del plan contribuye al objetivo institucional, al PND y al ODS seleccionado.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{base_url}}/api/alineaciones/"
+          }
+        },
+        {
+          "name": "14 - Crear meta del plan",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Meta creada', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('meta_id', String(pm.response.json().id));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRFToken",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"plan\": {{plan_id}},\n  \"objetivo_estrategico\": {{objetivo_id}},\n  \"nombre\": \"Meta funcional {{run_id}}\",\n  \"descripcion\": \"Meta del mismo expediente funcional.\",\n  \"resultado_esperado\": \"Alcanzar el valor objetivo dentro del periodo.\",\n  \"fecha_inicio\": \"{{fecha_inicio}}\",\n  \"fecha_fin\": \"{{fecha_fin}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{base_url}}/api/metas/"
+          }
+        },
+        {
+          "name": "15 - Activar meta",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Meta activada', () => pm.response.to.have.status(200));",
+                  "pm.expect(pm.response.json().estado).to.eql('ACTIVA');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRFToken",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{base_url}}/api/metas/{{meta_id}}/activar/"
+          }
+        },
+        {
+          "name": "16 - Crear indicador de la meta",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Indicador creado', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('indicador_id', String(pm.response.json().id));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRFToken",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"meta\": {{meta_id}},\n  \"nombre\": \"Indicador funcional {{run_id}}\",\n  \"descripcion\": \"Mide el cumplimiento de la meta del mismo expediente.\",\n  \"unidad_medida\": \"Porcentaje\",\n  \"valor_base\": \"10.00\",\n  \"valor_meta\": \"100.00\",\n  \"frecuencia\": \"MENSUAL\",\n  \"sentido\": \"ASCENDENTE\",\n  \"ponderacion\": \"100.00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{base_url}}/api/indicadores/"
+          }
+        },
+        {
+          "name": "17 - Confirmar que la estructura ya puede enviarse",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Expediente estructurado', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.expect(body.validacion.listo_para_revision).to.eql(true);",
+                  "pm.expect(body.validacion.listo_para_aprobacion).to.eql(false);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/planes/{{plan_id}}/expediente/"
+          }
+        },
+        {
+          "name": "18 - Enviar el mismo plan a revisión",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Plan enviado a revisión', () => pm.response.to.have.status(200));",
+                  "pm.expect(pm.response.json().estado).to.eql('EN_REVISION');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRFToken",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"observacion\": \"Expediente completo enviado desde la prueba funcional.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{base_url}}/api/planes/{{plan_id}}/enviar-a-revision/"
+          }
+        },
+        {
+          "name": "19 - Confirmar 403 al intentar aprobar como planificador",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('El planificador no aprueba', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRFToken",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{base_url}}/api/planes/{{plan_id}}/aprobar/"
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Revisión informada del supervisor",
+      "item": [
+        {
+          "name": "20 - Cerrar sesión de planificador",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Sesión cerrada', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRFToken",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{base_url}}/api/auth/logout/"
+          }
+        },
+        {
+          "name": "21 - Preparar CSRF de supervisor",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('CSRF preparado', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('csrf_token', pm.response.json().csrf_token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/auth/csrf/"
+          }
+        },
+        {
+          "name": "22 - Login como supervisor",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Login de supervisor correcto', () => pm.response.to.have.status(200));",
+                  "pm.expect(pm.response.json().usuario.username).to.eql(pm.collectionVariables.get('supervisor_username'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRFToken",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{supervisor_username}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{base_url}}/api/auth/login/"
+          }
+        },
+        {
+          "name": "23 - Renovar CSRF de supervisor",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('CSRF de supervisor preparado', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('csrf_token', pm.response.json().csrf_token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/auth/csrf/"
+          }
+        },
+        {
+          "name": "24 - Ver expediente, descripción, meta, indicador y ODS",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Supervisor ve el expediente', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.expect(String(body.plan.descripcion)).to.include('decisión del supervisor');",
+                  "const serialized = JSON.stringify(body.objetivos);",
+                  "pm.expect(serialized).to.include('Meta funcional');",
+                  "pm.expect(serialized).to.include('Indicador funcional');",
+                  "pm.expect(serialized).to.match(/\\\"numero\\\":16/);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/planes/{{plan_id}}/expediente/"
+          }
+        },
+        {
+          "name": "25 - Tomar la revisión",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Revisión iniciada', () => pm.response.to.have.status(200));",
+                  "pm.expect(pm.response.json().estado).to.eql('EN_REVISION_INICIADA');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRFToken",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"observacion\": \"El supervisor inicia la revisión del contenido mostrado.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{base_url}}/api/planes/{{plan_id}}/revisar/"
+          }
+        },
+        {
+          "name": "26 - Validar alineación PND y ODS",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Alineación validada', () => pm.response.to.have.status(200));",
+                  "pm.expect(pm.response.json().estado).to.eql('VALIDADA');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRFToken",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{base_url}}/api/alineaciones/{{alineacion_id}}/validar/"
+          }
+        },
+        {
+          "name": "27 - Validar indicador",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Indicador validado', () => pm.response.to.have.status(200));",
+                  "pm.expect(pm.response.json().validado).to.eql(true);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRFToken",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{base_url}}/api/indicadores/{{indicador_id}}/validar/"
+          }
+        },
+        {
+          "name": "28 - Confirmar expediente listo para aprobación",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Expediente listo para decisión', () => pm.response.to.have.status(200));",
+                  "pm.expect(pm.response.json().validacion.listo_para_aprobacion).to.eql(true);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/planes/{{plan_id}}/expediente/"
+          }
+        },
+        {
+          "name": "29 - Aprobar el mismo plan revisado",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Plan aprobado', () => pm.response.to.have.status(200));",
+                  "pm.expect(pm.response.json().estado).to.eql('APROBADO');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRFToken",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"observacion\": \"Contenido, alineación e indicador revisados y conformes.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{base_url}}/api/planes/{{plan_id}}/aprobar/"
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Seguimiento del plan aprobado",
+      "item": [
+        {
+          "name": "30 - Cerrar sesión de supervisor",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Sesión cerrada', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRFToken",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{base_url}}/api/auth/logout/"
+          }
+        },
+        {
+          "name": "31 - Preparar CSRF y volver a iniciar como planificador",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('CSRF preparado', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('csrf_token', pm.response.json().csrf_token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/auth/csrf/"
+          }
+        },
+        {
+          "name": "32 - Login nuevamente como planificador",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Login correcto', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRFToken",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{planificador_username}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{base_url}}/api/auth/login/"
+          }
+        },
+        {
+          "name": "33 - Renovar CSRF de planificador",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('CSRF renovado', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('csrf_token', pm.response.json().csrf_token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/auth/csrf/"
+          }
+        },
+        {
+          "name": "34 - Registrar avance de 55 sobre base 10 y meta 100",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Avance registrado', () => pm.response.to.have.status(201));",
+                  "pm.expect(pm.response.json().registrado_por_detalle.username).to.eql(pm.collectionVariables.get('planificador_username'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRFToken",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fecha_registro\": \"{{fecha_avance}}\",\n  \"valor\": \"55.00\",\n  \"observacion\": \"Primer corte del plan aprobado dentro del flujo funcional.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{base_url}}/api/indicadores/{{indicador_id}}/registrar-avance/"
+          }
+        },
+        {
+          "name": "35 - Consultar seguimiento calculado del indicador",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Seguimiento de indicador disponible', () => pm.response.to.have.status(200));",
+                  "pm.expect(Number(pm.response.json().progreso)).to.eql(50);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/indicadores/{{indicador_id}}/seguimiento/"
+          }
+        },
+        {
+          "name": "36 - Consultar consolidación del plan y su ODS",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Seguimiento del plan disponible', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.expect(Number(body.progreso)).to.eql(50);",
+                  "pm.expect(body.resumen).to.be.an('object');",
+                  "pm.expect(JSON.stringify(body.objetivos)).to.match(/\\\"numero\\\":16/);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/planes/{{plan_id}}/seguimiento/"
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Aislamiento institucional y 403",
+      "item": [
+        {
+          "name": "37 - Cerrar sesión de planificador",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Sesión cerrada', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRFToken",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{base_url}}/api/auth/logout/"
+          }
+        },
+        {
+          "name": "38 - Preparar CSRF de auditor",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('CSRF preparado', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('csrf_token', pm.response.json().csrf_token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/auth/csrf/"
+          }
+        },
+        {
+          "name": "39 - Login como auditor de otra institución",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Login de auditor correcto', () => pm.response.to.have.status(200));",
+                  "pm.expect(pm.response.json().usuario.username).to.eql(pm.collectionVariables.get('auditor_username'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRFToken",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{auditor_username}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{base_url}}/api/auth/login/"
+          }
+        },
+        {
+          "name": "40 - Renovar CSRF de auditor",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('CSRF renovado', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('csrf_token', pm.response.json().csrf_token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/auth/csrf/"
+          }
+        },
+        {
+          "name": "41 - El auditor SNP no descubre el expediente MDI",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('El aislamiento responde 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/planes/{{plan_id}}/expediente/"
+          }
+        },
+        {
+          "name": "42 - El auditor no puede aprobar",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('La acción sin permiso responde 403', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRFToken",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{base_url}}/api/planes/{{plan_id}}/aprobar/"
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000",
+      "type": "string"
+    },
+    {
+      "key": "password",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "planificador_username",
+      "value": "planificador",
+      "type": "string"
+    },
+    {
+      "key": "supervisor_username",
+      "value": "supervisor",
+      "type": "string"
+    },
+    {
+      "key": "auditor_username",
+      "value": "auditor",
+      "type": "string"
+    },
+    {
+      "key": "csrf_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "run_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "fecha_inicio",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "fecha_fin",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "fecha_avance",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "planificador_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "entidad_planificador_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "objetivo_pnd_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "ods_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "plan_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "objetivo_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "alineacion_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "meta_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "indicador_id",
+      "value": "",
+      "type": "string"
+    }
+  ]
+}
