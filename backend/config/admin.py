@@ -11,6 +11,8 @@ class SipeipAdminSite(AdminSite):
     index_title = "Administración técnica"
 
     def has_permission(self, request):
+        # El panel técnico requiere una cuenta activa de superusuario;
+        # ser staff o tener un rol administrativo ordinario no es suficiente.
         return (
             super().has_permission(request)
             and request.user.is_superuser
@@ -19,6 +21,8 @@ class SipeipAdminSite(AdminSite):
     def register(self, model_or_iterable, admin_class=None, **options):
         """Registra todos los modelos como consulta técnica de solo lectura."""
 
+        # Mantiene filtros y columnas de cada registro, pero bloquea escrituras
+        # para que no se omitan las reglas y la auditoría de los servicios de la API.
         base = admin_class or ModelAdmin
         solo_lectura = type(
             f"SoloLectura{base.__name__}",

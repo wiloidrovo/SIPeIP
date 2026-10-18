@@ -310,6 +310,8 @@ class DashboardView(APIView):
         alcance = obtener_alcance_usuario(usuario)
         planes = _planes_visibles(usuario)
 
+        # El tipo de resumen se elige por capacidades efectivas, no por nombres
+        # de roles. Cada contador se calcula sobre registros autorizados.
         administra = bool(
             permisos.intersection({"usuarios.editar", "roles.asignar_permisos", "configuracion.gestionar"})
         )

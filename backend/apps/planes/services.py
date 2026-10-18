@@ -118,6 +118,7 @@ def evaluar_integridad_plan(plan, metas=None):
             "El plan debe contener al menos una meta institucional.",
         )
 
+    # Varias metas pueden compartir objetivo; revisa su alineación una sola vez.
     objetivos_revisados = set()
     for meta in metas:
         contexto_meta = {"meta_id": meta.pk, "meta": meta.nombre}
@@ -246,6 +247,7 @@ def evaluar_integridad_plan(plan, metas=None):
             )
             continue
 
+        # El peso se distribuye dentro de cada meta, no entre todo el plan.
         total_ponderacion = sum(
             (item.ponderacion for item in indicadores),
             Decimal("0"),

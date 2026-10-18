@@ -8,6 +8,8 @@ from .models import (
 )
 
 
+# Registra las vistas de consulta técnica del proyecto, su cronograma y
+# sus cortes de seguimiento. config/admin.py restringe las escrituras.
 @admin.register(TipologiaIntervencion)
 class TipologiaIntervencionAdmin(admin.ModelAdmin):
     list_display = ("codigo", "nombre", "activo", "fecha_actualizacion")

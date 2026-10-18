@@ -253,6 +253,8 @@ class PlanViewSet(AuditoriaModelViewSetMixin, viewsets.ModelViewSet):
         limpiar_revision=False,
         registrar_aprobacion=False,
     ):
+        # Primero resuelve el registro dentro del alcance autorizado. El estado
+        # se comprueba de nuevo bajo bloqueo para evitar decisiones simultáneas.
         plan_autorizado = self.get_object()
         with transaction.atomic():
             plan = self._obtener_instancia_bloqueada(plan_autorizado)
@@ -283,6 +285,8 @@ class PlanViewSet(AuditoriaModelViewSetMixin, viewsets.ModelViewSet):
                         status=status.HTTP_409_CONFLICT,
                     )
 
+            # Enviar exige estructura completa; aprobar añade las validaciones
+            # del supervisor sobre indicadores y alineaciones.
             if validacion_requerida:
                 evaluacion = evaluar_integridad_plan(plan)
                 clave = (
@@ -349,6 +353,7 @@ class PlanViewSet(AuditoriaModelViewSetMixin, viewsets.ModelViewSet):
                 plan.activo = activo
                 campos.append("activo")
             plan.save(update_fields=list(dict.fromkeys(campos)))
+            # Estado, historial y auditoría se confirman juntos o se revierten.
             HistorialEstadoPlan.objects.create(
                 plan=plan,
                 usuario=self.request.user,
@@ -482,6 +487,8 @@ class PlanViewSet(AuditoriaModelViewSetMixin, viewsets.ModelViewSet):
         )
 
     def _construir_expediente(self, plan):
+        # Reúne el contenido que sustenta la decisión, siguiendo la relación
+        # plan -> metas -> objetivos y sus alineaciones, sin duplicar vínculos.
         metas = list(plan.metas.all())
         grupos = agrupar_metas_por_objetivo(metas)
         contexto = self.get_serializer_context()

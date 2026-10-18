@@ -2,6 +2,7 @@ from django.apps import AppConfig
 
 
 class ProyectosConfig(AppConfig):
+    # Registra proyectos, hitos, seguimiento y tipologías de intervención.
     default_auto_field = "django.db.models.BigAutoField"
     name = "apps.proyectos"
     verbose_name = "Proyectos de inversión"

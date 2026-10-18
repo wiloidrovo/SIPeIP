@@ -8,6 +8,8 @@ from .views import (
 )
 
 
+# Expone proyecto, catálogo, cronograma y seguimiento como recursos
+# separados, todos sujetos a los permisos y al alcance de sus vistas.
 router = DefaultRouter()
 router.register(
     "tipologias-intervencion",

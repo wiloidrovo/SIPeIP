@@ -35,6 +35,7 @@ def filtrar_proyectos_por_alcance(queryset, usuario):
     if entidad_id is None:
         return queryset.none()
 
+    # La condición de propiedad se suma al límite institucional: no lo reemplaza.
     queryset = queryset.filter(entidad_id=entidad_id)
     if alcance in ALCANCES_PROPIOS:
         queryset = queryset.filter(

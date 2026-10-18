@@ -31,6 +31,8 @@ function pndObjectiveLabel(item: ApiRecord) {
 }
 
 export function PndPage() {
+  // Separa el catálogo nacional (ejes y objetivos) de las relaciones
+  // institucionales. Gestionar el catálogo y validar una alineación son permisos distintos.
   return (
     <div className="stacked-pages">
       <ResourcePage

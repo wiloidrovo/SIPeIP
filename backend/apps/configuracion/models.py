@@ -10,6 +10,8 @@ class EntidadInstitucional(models.Model):
         ACTIVA = "ACTIVA", "Activa"
         INACTIVA = "INACTIVA", "Inactiva"
 
+    # Identificación institucional compartida por usuarios, planes y proyectos.
+    # El estado permite retirar una entidad sin borrar sus registros históricos.
     codigo_oficial = models.CharField(max_length=50, unique=True)
     nombre = models.CharField(max_length=200, unique=True)
     subsector = models.CharField(max_length=150)
@@ -47,6 +49,7 @@ class EntidadInstitucional(models.Model):
             errores["subsector"] = "El subsector es obligatorio."
         if not self.nivel_gobierno:
             errores["nivel_gobierno"] = "El nivel de gobierno es obligatorio."
+        # La búsqueda ignora mayúsculas y excluye el registro que se está editando.
         codigos_iguales = EntidadInstitucional.objects.filter(
             codigo_oficial__iexact=self.codigo_oficial
         )
@@ -87,6 +90,7 @@ class UnidadOrganizacional(models.Model):
     )
     nombre = models.CharField(max_length=150)
     codigo = models.CharField(max_length=50, blank=True)
+    # Una raíz no tiene padre. Las subunidades conservan su dependencia con PROTECT.
     unidad_padre = models.ForeignKey(
         "self",
         on_delete=models.PROTECT,
@@ -107,6 +111,8 @@ class UnidadOrganizacional(models.Model):
         verbose_name = "Unidad organizacional"
         verbose_name_plural = "Unidades organizacionales"
         ordering = ["entidad__nombre", "nombre"]
+        # El nombre y el código se repiten entre entidades, no dentro de una misma.
+        # El código es opcional: varias unidades pueden dejarlo vacío.
         constraints = [
             models.UniqueConstraint(
                 fields=["entidad", "nombre"],
@@ -172,6 +178,8 @@ class UnidadOrganizacional(models.Model):
             raise ValidationError(errores)
 
     def _genera_ciclo(self, unidad_padre):
+        # Recorre los ascendientes para evitar que una unidad sea descendiente
+        # de sí misma. El conjunto también corta ciclos preexistentes.
         visitadas = set()
         actual = unidad_padre
         while actual is not None:

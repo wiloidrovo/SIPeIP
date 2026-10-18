@@ -29,6 +29,7 @@ class EntidadInstitucionalViewSet(
     mixins.ListModelMixin,
     viewsets.GenericViewSet,
 ):
+    # Las entidades se activan o desactivan: no se expone eliminación por API.
     serializer_class = EntidadInstitucionalSerializer
     permission_classes = [IsAuthenticated, HasSipeipPermission]
     permission_map = {
@@ -61,6 +62,8 @@ class EntidadInstitucionalViewSet(
         return filtrar_queryset_por_entidad(queryset, self.request.user, "pk")
 
     def perform_create(self, serializer):
+        # Tener permiso de configuración no autoriza crear instituciones fuera
+        # del propio ámbito; la creación exige alcance administrativo global.
         if not tiene_alcance_global(self.request.user):
             raise PermissionDenied(
                 "Solo un usuario con alcance global puede crear entidades."
@@ -102,6 +105,8 @@ class EntidadInstitucionalViewSet(
             )
         from apps.planes.models import Plan
 
+        # Bloquea el plan antes de decidir para no desactivar su institución
+        # mientras otro proceso lo está revisando o aprobando.
         plan_vigente = (
             Plan.objects.select_for_update()
             .filter(
@@ -150,6 +155,7 @@ class UnidadOrganizacionalViewSet(
     mixins.ListModelMixin,
     viewsets.GenericViewSet,
 ):
+    # Las unidades conservan su jerarquía al desactivarse y no se borran por API.
     serializer_class = UnidadOrganizacionalSerializer
     permission_classes = [IsAuthenticated, HasSipeipPermission]
     permission_map = {
@@ -198,6 +204,7 @@ class UnidadOrganizacionalViewSet(
                 {"detail": "La unidad ya se encuentra activa."},
                 status=status.HTTP_409_CONFLICT,
             )
+        # La jerarquía se activa de arriba hacia abajo: institución, padre, hija.
         if unidad.entidad.estado != EntidadInstitucional.Estado.ACTIVA:
             return Response(
                 {"detail": "No se puede activar una unidad de una entidad inactiva."},
@@ -234,6 +241,8 @@ class UnidadOrganizacionalViewSet(
                 {"detail": "La unidad ya se encuentra inactiva."},
                 status=status.HTTP_409_CONFLICT,
             )
+        # La desactivación sigue el orden inverso para no dejar hijas operativas
+        # debajo de una unidad inactiva.
         if unidad.subunidades.filter(
             estado=UnidadOrganizacional.Estado.ACTIVA
         ).exists():

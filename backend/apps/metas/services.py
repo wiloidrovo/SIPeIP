@@ -82,6 +82,8 @@ def _elementos_relacion(relacion: Any) -> list[Any]:
 def _promedio_ponderado(
     elementos: Iterable[tuple[Decimal, Decimal]],
 ) -> Decimal:
+    # Normaliza por la suma de pesos para poder calcular también un borrador.
+    # Exigir exactamente 100 % corresponde a la validación del expediente.
     total_ponderacion = CERO
     acumulado = CERO
     for progreso, ponderacion in elementos:
@@ -94,6 +96,7 @@ def _promedio_ponderado(
 
 
 def _avance_esperado(fecha_inicio: Any, fecha_fin: Any, hoy: date) -> Decimal:
+    # Referencia lineal del tiempo transcurrido; no es una medición registrada.
     inicio = _fecha(fecha_inicio)
     fin = _fecha(fecha_fin)
     if inicio is None or fin is None:
@@ -153,6 +156,8 @@ def calcular_progreso_indicador(indicador: Any) -> Decimal:
     actual = _decimal(getattr(indicador, "valor_actual", None))
     sentido = getattr(indicador, "sentido", "ASCENDENTE")
 
+    # Mide la distancia recorrida desde la línea base hacia el valor objetivo;
+    # reducir el valor también representa progreso en un indicador descendente.
     if sentido == "DESCENDENTE":
         distancia = base - meta
         if distancia == 0:
@@ -227,6 +232,8 @@ def calcular_seguimiento_indicador(
     )
     fin_meta = _fecha(getattr(meta, "fecha_fin", None))
 
+    # Validar la ficha y cumplir el objetivo son cosas distintas. La ficha
+    # pendiente tiene prioridad aunque el valor calculado ya alcance el 100 %.
     if not getattr(indicador, "validado", False):
         estado = ESTADO_PENDIENTE_VALIDACION
     elif progreso >= CIEN:
@@ -460,6 +467,7 @@ def calcular_seguimiento_plan(
         calcular_seguimiento_meta(meta, fecha_referencia)
         for meta in metas
     ]
+    # Cada meta no archivada aporta por igual al consolidado del plan.
     progreso = _promedio_ponderado(
         (seguimiento["progreso"], Decimal("1.00"))
         for seguimiento in seguimientos

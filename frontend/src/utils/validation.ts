@@ -1,3 +1,5 @@
+// Ayudas de validación local. No sustituyen los serializers ni las reglas de
+// estado y alcance del backend; cada pantalla decide qué validadores utiliza.
 /**
  * Interfaz estándar para el resultado de validaciones en formularios.
  */

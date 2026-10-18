@@ -16,6 +16,7 @@ export function Modal({
   const closeRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
+    // Mueve el foco solo al abrir, no cada vez que cambia el formulario interno.
     if (open) closeRef.current?.focus();
   }, [open]);
 

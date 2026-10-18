@@ -32,6 +32,8 @@ class EventoAuditoriaViewSet(viewsets.ReadOnlyModelViewSet):
     ordering = ["-fecha_hora", "-id"]
 
     def get_queryset(self):
+        # Los filtros de búsqueda solo reducen el ámbito ya autorizado.
+        # Esta vista no ofrece operaciones para editar o borrar la bitácora.
         queryset = EventoAuditoria.objects.select_related("usuario", "entidad")
         queryset = filtrar_queryset_por_entidad(
             queryset, self.request.user, "entidad"

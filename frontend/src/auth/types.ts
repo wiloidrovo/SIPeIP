@@ -1,3 +1,5 @@
+// Contrato de la sesión devuelta por la API. Los permisos efectivos vienen
+// en el usuario; el nombre y código del rol solo describen su perfil.
 export type SessionRole = {
   id: number;
   codigo: string;

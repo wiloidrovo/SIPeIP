@@ -3,6 +3,7 @@ from django.db import models
 
 
 class EventoAuditoria(models.Model):
+    # Bitácora de acciones y resultados. La API permite consultarla, no editarla.
     class Resultado(models.TextChoices):
         EXITO = "EXITO", "Éxito"
         FALLO = "FALLO", "Fallo"
@@ -14,6 +15,8 @@ class EventoAuditoria(models.Model):
         null=True,
         blank=True,
     )
+    # Conserva el identificador usado en el evento, incluso en un login fallido
+    # que todavía no tenga un usuario autenticado asociado.
     usuario_identificador = models.CharField(max_length=150, blank=True)
     entidad = models.ForeignKey(
         "configuracion.EntidadInstitucional",
@@ -26,8 +29,11 @@ class EventoAuditoria(models.Model):
     modulo = models.CharField(max_length=60, db_index=True)
     funcionalidad = models.CharField(max_length=120)
     accion = models.CharField(max_length=60, db_index=True)
+    # Tipo e ID son una referencia textual: siguen disponibles si se elimina
+    # el registro afectado y permiten auditar modelos de distintos módulos.
     tipo_entidad = models.CharField(max_length=120, blank=True)
     registro_id = models.CharField(max_length=64, blank=True)
+    # Los servicios eliminan claves sensibles antes de guardar estas instantáneas.
     valores_anteriores = models.JSONField(default=dict, blank=True)
     valores_posteriores = models.JSONField(default=dict, blank=True)
     direccion_ip = models.GenericIPAddressField(null=True, blank=True)

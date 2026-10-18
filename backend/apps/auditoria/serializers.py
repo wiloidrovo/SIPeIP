@@ -4,6 +4,7 @@ from .models import EventoAuditoria
 
 
 class EventoAuditoriaSerializer(serializers.ModelSerializer):
+    # Expone el evento junto con nombres legibles, sin habilitar su modificación.
     usuario_nombre = serializers.CharField(
         source="usuario.get_full_name",
         read_only=True,
@@ -31,4 +32,5 @@ class EventoAuditoriaSerializer(serializers.ModelSerializer):
             "resultado",
             "detalle",
         ]
+        # Ningún dato de la bitácora se acepta como entrada desde este serializer.
         read_only_fields = fields

@@ -3,6 +3,8 @@ from django.contrib import admin
 from .models import Rol
 
 
+# Filtros y columnas para consultar roles; los cambios de permisos se
+# realizan mediante las acciones protegidas de la aplicación.
 @admin.register(Rol)
 class RolAdmin(admin.ModelAdmin):
     """Configuración del panel administrativo de Django para el modelo Rol."""

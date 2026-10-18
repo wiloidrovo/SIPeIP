@@ -52,6 +52,7 @@ export function ReportesPage() {
       .finally(() => setLoading(false));
   }, []);
 
+  // El catálogo del backend indica los filtros y formatos disponibles por cuenta.
   const activeFilters = useMemo(() => new Set(selected?.filtros ?? []), [selected]);
   const query = () => new URLSearchParams(
     Object.entries(filters).filter(([key, value]) => activeFilters.has(key) && value),
@@ -77,6 +78,7 @@ export function ReportesPage() {
     try {
       const suffix = query();
       const blob = await apiDownload(`/reportes/exportar/${report.codigo}/${format}/${suffix ? `?${suffix}` : ""}`);
+      // Crea un enlace temporal al archivo recibido y libera su memoria al terminar.
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = url;

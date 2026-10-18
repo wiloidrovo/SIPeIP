@@ -9,6 +9,8 @@ from .views import (
 )
 
 
+# Publica los catálogos y la matriz por separado; compartir router no
+# implica compartir permisos ni alcance, que se comprueban en cada vista.
 router = DefaultRouter()
 router.register(
     "objetivos-estrategicos",

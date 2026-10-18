@@ -4,6 +4,8 @@ from .datasets import MAX_FILAS_REPORTE
 
 
 class FiltrosReporteSerializer(serializers.Serializer):
+    # Valida los parámetros de consulta. El filtrado institucional se aplica
+    # aparte: seleccionar una entidad aquí nunca amplía el alcance del usuario.
     entidad = serializers.IntegerField(min_value=1, required=False)
     estado = serializers.CharField(max_length=30, required=False, trim_whitespace=True)
     activo = serializers.BooleanField(required=False)
@@ -15,6 +17,7 @@ class FiltrosReporteSerializer(serializers.Serializer):
     resultado = serializers.ChoiceField(
         choices=("EXITO", "FALLO"), required=False
     )
+    # Acota la cantidad de filas para mantener controlado el tamaño del reporte.
     limite = serializers.IntegerField(
         min_value=1,
         max_value=MAX_FILAS_REPORTE,

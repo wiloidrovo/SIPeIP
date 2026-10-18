@@ -109,6 +109,8 @@ function canConfigureScope(role: Role, user: SessionUser | null, catalog: string
 }
 
 function groupCatalog(catalog: string[]): PermissionGroup[] {
+  // Las etiquetas son locales, pero la lista de permisos viene del backend.
+  // Agruparlos aquí no crea ni concede permisos nuevos.
   const groups = new Map<string, PermissionGroup>();
   for (const permission of catalog) {
     const separator = permission.indexOf(".");
@@ -215,6 +217,7 @@ export function RolesPage() {
   }
 
   async function assign(role: Role) {
+    // Guardar nombre, asignar permisos y cambiar alcance son operaciones separadas.
     if (!canAssignRolePermissions(role, user, catalog)) return;
     setBusy(true);
     try {

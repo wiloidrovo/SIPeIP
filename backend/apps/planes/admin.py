@@ -3,6 +3,8 @@ from django.contrib import admin
 from .models import HistorialEstadoPlan, Plan
 
 
+# El listado muestra responsables y fechas; el historial conserva cada
+# transición individual sin permitir su edición desde administración.
 @admin.register(Plan)
 class PlanAdmin(admin.ModelAdmin):
     """Configuración de administración para planes institucionales."""

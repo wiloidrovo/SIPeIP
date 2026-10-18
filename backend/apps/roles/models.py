@@ -8,6 +8,8 @@ class Rol(models.Model):
     Un rol gestiona el acceso a diferentes módulos y operaciones.
     """
 
+    # El alcance limita los registros; los permisos limitan las operaciones.
+    # Los querysets aplican esta distinción antes de devolver información.
     class Alcance(models.TextChoices):
         TOTAL = "TOTAL", "Total"
         GLOBAL = "GLOBAL", "Global administrativo"
@@ -40,6 +42,7 @@ class Rol(models.Model):
         default=Alcance.ENTIDAD,
     )
     
+    # Django conserva la fecha inicial y renueva la de modificación al guardar.
     fecha_creacion = models.DateTimeField(auto_now_add=True)
     fecha_actualizacion = models.DateTimeField(auto_now=True)
 

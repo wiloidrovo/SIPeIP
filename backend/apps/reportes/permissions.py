@@ -23,6 +23,8 @@ class PuedeGenerarReporte(BasePermission):
         especificacion = view.get_dataset_spec(request)
         if especificacion is None:
             return False
+        # Ver reportes no concede acceso a todos los módulos. Cada conjunto
+        # exige sus permisos de origen y, al descargar, los de exportación.
         requeridos = especificacion.permisos_fuente
         if permiso_operacion == "reportes.exportar":
             requeridos += especificacion.permisos_exportacion

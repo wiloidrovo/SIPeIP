@@ -25,6 +25,8 @@ class SipeipApiEssentialTests(TestCase):
 
     @classmethod
     def setUpTestData(cls):
+        # Dos instituciones permiten verificar accesos autorizados y fugas de
+        # información con los mismos endpoints. Son datos de la base de pruebas.
         cls.entidad_a = EntidadInstitucional.objects.create(
             codigo_oficial="TEST-A",
             nombre="Entidad aislada A",

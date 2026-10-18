@@ -61,6 +61,8 @@ function valueText(value: AuditValue | undefined): string {
 }
 
 function changedFields(event: AuditEvent) {
+  // Presenta solo las diferencias relevantes. Omitir fechas automáticas aquí
+  // no las elimina del evento almacenado en la bitácora.
   const previous = event.valores_anteriores ?? {};
   const next = event.valores_posteriores ?? {};
   const automaticFields = new Set(["fecha_creacion", "fecha_actualizacion", "last_login"]);

@@ -232,6 +232,8 @@ class UnidadOrganizacionalSerializer(serializers.ModelSerializer):
         return attrs
 
     def _genera_ciclo(self, unidad_padre):
+        # Recorre los ascendientes: no basta con impedir que una unidad sea
+        # su propio padre; tampoco puede depender de una de sus descendientes.
         visitadas = set()
         actual = unidad_padre
         while actual is not None:

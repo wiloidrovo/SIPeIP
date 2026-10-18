@@ -54,6 +54,8 @@ export type IndicatorAdvance = {
   registrado_por_detalle?: UserSummary | null;
 };
 
+// Los decimales de DRF pueden llegar como texto. Se convierten solo para
+// presentación; los cálculos institucionales se conservan en el servidor.
 export type IndicatorSummary = {
   id: number;
   nombre: string;

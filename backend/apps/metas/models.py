@@ -21,6 +21,8 @@ class Meta(models.Model):
         CERRADA = "CERRADA", "Cerrada"
         ARCHIVADA = "ARCHIVADA", "Archivada"
 
+    # La meta une el plan con el objetivo al que contribuye. Ambos se protegen
+    # de eliminación mientras existan metas que los utilicen.
     plan = models.ForeignKey(
         "planes.Plan",
         on_delete=models.PROTECT,
@@ -33,6 +35,7 @@ class Meta(models.Model):
     )
     nombre = models.CharField(max_length=150)
     descripcion = models.TextField(blank=True)
+    # El resultado describe el compromiso; los indicadores aportan su medición.
     resultado_esperado = models.TextField(blank=True)
     fecha_inicio = models.DateField()
     fecha_fin = models.DateField()
@@ -41,6 +44,8 @@ class Meta(models.Model):
         choices=EstadoMeta.choices,
         default=EstadoMeta.BORRADOR,
     )
+    # Las acciones de la API cambian estado y activa juntos; la base comprueba
+    # que no se guarde una meta cerrada o archivada como activa.
     activa = models.BooleanField(default=False)
     fecha_creacion = models.DateTimeField(auto_now_add=True)
     fecha_actualizacion = models.DateTimeField(auto_now=True)
@@ -88,6 +93,8 @@ class Meta(models.Model):
                         flat=True,
                     ).first()
                 )
+            # Puede conservarse una relación histórica con un objetivo inactivo,
+            # pero no asignarlo por primera vez a otra meta.
             conserva_objetivo_existente = (
                 objetivo_existente_id == self.objetivo_estrategico_id
             )
@@ -144,6 +151,8 @@ class Indicador(models.Model):
     nombre = models.CharField(max_length=150)
     descripcion = models.TextField(blank=True)
     unidad_medida = models.CharField(max_length=50)
+    # Base: punto de partida; meta: valor que se pretende alcanzar; actual:
+    # última medición registrada. Los tres usan la misma unidad de medida.
     valor_base = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     valor_meta = models.DecimalField(max_digits=12, decimal_places=2)
     valor_actual = models.DecimalField(max_digits=12, decimal_places=2, default=0)
@@ -152,11 +161,14 @@ class Indicador(models.Model):
         choices=FrecuenciaMedicion.choices,
         default=FrecuenciaMedicion.TRIMESTRAL,
     )
+    # Ascendente mide aumentos y descendente mide reducciones respecto a la base.
     sentido = models.CharField(
         max_length=20,
         choices=SentidoMedicion.choices,
         default=SentidoMedicion.ASCENDENTE,
     )
+    # Peso del indicador al calcular el cumplimiento de su meta. El servicio
+    # de planificación comprueba la suma de pesos antes de enviar el plan.
     ponderacion = models.DecimalField(
         max_digits=5,
         decimal_places=2,
@@ -173,6 +185,8 @@ class Indicador(models.Model):
         ],
     )
     activo = models.BooleanField(default=True)
+    # La validación de la ficha es una decisión de revisión, no equivale a que
+    # el indicador haya alcanzado su valor meta.
     validado = models.BooleanField(default=False)
     validado_por = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -312,10 +326,13 @@ class AvanceIndicador(models.Model):
         on_delete=models.PROTECT,
         related_name="avances",
     )
+    # Fecha de la medición, distinta de la fecha de creación del registro.
     fecha_registro = models.DateField()
     valor = models.DecimalField(max_digits=12, decimal_places=2)
     observacion = models.TextField(blank=True)
+    # Referencia textual de respaldo; este campo no almacena archivos adjuntos.
     evidencia = models.CharField(max_length=500, blank=True)
+    # La API toma el autor de la sesión; no permite elegirlo desde el formulario.
     registrado_por = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,

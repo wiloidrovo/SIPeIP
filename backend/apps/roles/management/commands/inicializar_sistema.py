@@ -42,6 +42,8 @@ USUARIOS_INICIALES = (
 
 
 def _validar_base_local():
+    # Este comando prepara datos locales: rechaza otros motores, hosts o bases
+    # antes de ejecutar cualquier escritura, incluso si existe conexión válida.
     if not settings.DEBUG:
         raise CommandError(
             "La inicialización solo está permitida con DEBUG activo."
@@ -67,12 +69,15 @@ def _validar_base_local():
 
 
 def _guardar_validado(instancia):
+    # save no ejecuta full_clean automáticamente; aquí se valida de forma explícita.
     instancia.full_clean()
     instancia.save()
     return instancia
 
 
 def _actualizar_o_crear(modelo, lookup, defaults):
+    # La clave de búsqueda evita duplicados al repetir el comando. Los campos
+    # de defaults se reaplican: no es una carga que preserve cambios manuales.
     instancia, _ = modelo.objects.get_or_create(**lookup, defaults=defaults)
     for campo, valor in defaults.items():
         setattr(instancia, campo, valor)
@@ -107,6 +112,8 @@ class Command(BaseCommand):
         )
 
     def _inicializar_datos(self, password):
+        # El orden respeta dependencias: institución y cuentas antes de objetivos,
+        # planes, mediciones y proyectos que necesitan esas referencias.
         entidades, unidades = self._crear_estructura_institucional()
         usuarios = self._crear_usuarios(password, entidades, unidades)
         objetivos = self._crear_alineacion(entidades, usuarios)
@@ -250,6 +257,8 @@ class Command(BaseCommand):
                 "superadministrador_tecnico",
             }
             usuario.is_superuser = codigo_rol == "superadministrador_tecnico"
+            # Solo se guarda el hash. Repetir la inicialización también cambia
+            # las contraseñas de estas seis cuentas al valor recibido por parámetro.
             usuario.set_password(password)
             usuarios[username] = _guardar_validado(usuario)
         return usuarios
@@ -391,6 +400,8 @@ class Command(BaseCommand):
         return {"secretaria": plan_secretaria, "ministerio": plan_ministerio}
 
     def _crear_alineacion(self, entidades, usuarios):
+        # Los códigos REF son datos de referencia para recorrer el sistema,
+        # no una importación del catálogo oficial completo del PND.
         eje = _actualizar_o_crear(
             EjePND,
             {"codigo": "EJE-REF-01"},
@@ -525,6 +536,7 @@ class Command(BaseCommand):
         )
 
     def _crear_evento_inicial(self, entidades, usuarios):
+        # Deja constancia de la carga sin incluir la contraseña suministrada.
         _actualizar_o_crear(
             EventoAuditoria,
             {

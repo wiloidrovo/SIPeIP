@@ -6,6 +6,8 @@ import type {
   PlanValidation,
 } from "./planningTypes";
 
+// Consultas del expediente y acciones del flujo; la capa común agrega cookies,
+// CSRF y manejo de errores para no repetirlos en las pantallas de detalle.
 export const planningApi = {
   dossier: (planId: number) =>
     apiRequest<PlanDossier>(`/planes/${planId}/expediente/`),

@@ -20,6 +20,7 @@ from dotenv import load_dotenv
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# Lee la configuración local sin incorporar credenciales al código versionado.
 load_dotenv(BASE_DIR / ".env")
 
 
@@ -75,6 +76,8 @@ INSTALLED_APPS = [
     'apps.reportes',
 ]
 
+# La auditoría de fallos necesita que sesión y usuario ya estén resueltos.
+# CSRF permanece activo también cuando la aplicación utiliza JSON.
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -182,6 +185,8 @@ SIPEIP_FRONTEND_LOGIN_URL = os.getenv(
     "http://localhost:5173/login",
 )
 
+# La lectura de páginas no prolonga sola la sesión; la renovación se realiza
+# mediante el endpoint de refresh mientras la sesión todavía sea válida.
 AUTH_SESSION_AGE_SECONDS = int(os.getenv("AUTH_SESSION_AGE_SECONDS", "900"))
 SESSION_COOKIE_AGE = AUTH_SESSION_AGE_SECONDS
 SESSION_COOKIE_HTTPONLY = True
@@ -198,6 +203,8 @@ CSRF_COOKIE_SAMESITE = "Lax"
 CSRF_COOKIE_SECURE = SESSION_COOKIE_SECURE
 CSRF_FAILURE_VIEW = "config.api_exceptions.csrf_failure"
 
+# Respuestas JSON y autenticación obligatoria por defecto. Las vistas públicas
+# de autenticación declaran sus excepciones sin desactivar la protección CSRF.
 REST_FRAMEWORK = {
     "DEFAULT_RENDERER_CLASSES": [
         "rest_framework.renderers.JSONRenderer",

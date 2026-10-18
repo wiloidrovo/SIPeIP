@@ -72,6 +72,8 @@ class ReporteBaseView(APIView):
         return serializer.validated_data, None
 
     def _generar(self, request):
+        # Usa el mismo constructor para consultar y descargar, manteniendo
+        # idénticas reglas de alcance, filtros y límite de filas.
         spec = self.get_dataset_spec(request)
         if spec is None:
             return None, None, Response(

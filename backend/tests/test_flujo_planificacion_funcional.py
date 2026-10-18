@@ -167,6 +167,7 @@ class FlujoPlanificacionFuncionalTests(TestCase):
 
     @staticmethod
     def _post(client, token, url, data=None):
+        # Mantiene cookie de sesión y CSRF del perfil que ejecuta cada paso.
         return client.post(
             url,
             data or {},

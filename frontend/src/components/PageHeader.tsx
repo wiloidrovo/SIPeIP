@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 
+// Encabezado común: cada página aporta sus textos y las acciones permitidas.
 export function PageHeader({
   eyebrow,
   title,

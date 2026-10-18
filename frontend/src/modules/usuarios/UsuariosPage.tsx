@@ -23,6 +23,8 @@ function scopeIsDelegable(actorScope: string | undefined, targetScope: string) {
 }
 
 function roleIsUnavailable(role: ApiRecord, user: SessionUser | null) {
+  // Orienta el selector con los permisos y el alcance que la cuenta puede
+  // delegar. El serializer vuelve a validar la asignación al guardar.
   if (!user || user.es_superusuario) return false;
   if (String(role.codigo) === protectedRoleCode) return true;
   const permissions = Array.isArray(role.permisos)
@@ -43,6 +45,7 @@ function unitMatchesSelectedEntity(
   option: SelectOption,
   context: SelectFilterContext,
 ) {
+  // Una unidad solo puede seleccionarse dentro de la entidad elegida.
   const entityId = String(context.values.entidad ?? "");
   return Boolean(
     entityId && String(option.record?.entidad ?? "") === entityId,

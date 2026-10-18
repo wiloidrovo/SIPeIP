@@ -1,3 +1,5 @@
+/* Trazo del botón de navegación. Su visibilidad por tamaño de pantalla se
+   controla con .mobile-toggle en styles/index.css. */
 .menu-lines,
 .menu-lines::before,
 .menu-lines::after {

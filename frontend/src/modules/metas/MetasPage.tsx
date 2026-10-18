@@ -47,6 +47,7 @@ function objectiveMatchesSelectedPlan(
   option: SelectOption,
   context: SelectFilterContext,
 ) {
+  // La entidad se toma del plan seleccionado, no de un campo libre de la meta.
   const selectedPlan = selectedOption("plan", context);
   return Boolean(
     selectedPlan
@@ -84,6 +85,7 @@ function planIsApproved(item: ApiRecord) {
 }
 
 function goalIsExpired(item: ApiRecord) {
+  // Compara fechas locales sin convertirlas a UTC, que podría cambiar el día.
   const endDate = String(item.fecha_fin ?? "").slice(0, 10);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(endDate)) return false;
   const today = new Date();

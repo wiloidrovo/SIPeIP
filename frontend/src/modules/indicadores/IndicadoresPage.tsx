@@ -15,6 +15,8 @@ function canRegisterProgress(item: Record<string, unknown>) {
     && String(meta?.plan_estado ?? "") === "APROBADO";
 }
 
+// La ficha se define antes de la revisión; las mediciones corresponden a la
+// etapa posterior a la aprobación. No se edita valor_actual desde este formulario.
 const editablePlanStates = new Set(["BORRADOR", "DEVUELTO", "RECHAZADO"]);
 const metas = optionsFrom(
   "/metas/",

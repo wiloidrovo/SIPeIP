@@ -295,6 +295,7 @@ class UsuarioSerializer(serializers.ModelSerializer):
             usuario.is_active = False
 
     def create(self, validated_data):
+        # Retira la contraseña del guardado ordinario y genera su hash con Django.
         password = validated_data.pop("password", None)
         usuario = Usuario(**validated_data)
 
@@ -309,6 +310,7 @@ class UsuarioSerializer(serializers.ModelSerializer):
         return usuario
 
     def update(self, instance, validated_data):
+        # Si no llega una contraseña nueva, conserva el hash que ya tenía la cuenta.
         password = validated_data.pop("password", None)
 
         for field, value in validated_data.items():

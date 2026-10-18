@@ -35,6 +35,7 @@ function matchesSelectedEntity(
 }
 
 async function projectMilestones(record?: ApiRecord) {
+  // Parte de los hitos visibles por la API y limita el selector al proyecto abierto.
   const payload = await apiRequest<ApiRecord[] | { results: ApiRecord[] }>("/hitos-proyectos/", { notify: false });
   return normalizeList(payload)
     .filter((item) => Number(item.proyecto) === record?.id && item.activo !== false)
@@ -47,6 +48,7 @@ function projectState(record: ApiRecord) {
 }
 
 function SecondarySection({ title, description, children }: { title: string; description: string; children: ReactNode }) {
+  // Monta las tablas secundarias al desplegarlas para no cargar todo de entrada.
   const [open, setOpen] = useState(false);
   return <details className="project-section" open={open} onToggle={(event) => setOpen(event.currentTarget.open)}>
     <summary><span><strong>{title}</strong><small>{description}</small></span></summary>

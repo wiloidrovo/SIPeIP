@@ -30,6 +30,7 @@ MIME_TYPES = {
 
 
 def _valor_tabular(valor):
+    # Convierte valores compuestos a texto legible sin perder caracteres españoles.
     convertido = valor_json(valor)
     if convertido is None:
         return ""
@@ -45,6 +46,8 @@ def _valor_tabular(valor):
 
 
 def _valor_xlsx(valor):
+    # Conserva números y fechas como celdas tipadas. Excel no admite zonas horarias;
+    # por eso las fechas se convierten a la hora local antes de quitar esa información.
     if valor is None:
         return ""
     if isinstance(valor, datetime):
@@ -62,6 +65,7 @@ def _valor_xlsx(valor):
 
 
 def exportar_json(spec, filas, metadata):
+    # Incluye nombres de columnas y filtros para interpretar los resultados sin UI.
     contenido = {
         **metadata,
         "columnas": [
@@ -92,6 +96,7 @@ def exportar_csv(spec, filas, metadata):
 
 
 def exportar_xlsx(spec, filas, metadata):
+    # Separa los datos filtrables de la hoja que identifica la generación del reporte.
     libro = Workbook(write_only=False)
     hoja = libro.active
     hoja.title = "Reporte"
@@ -158,6 +163,8 @@ def exportar_xlsx(spec, filas, metadata):
 
 
 def exportar_pdf(spec, filas, metadata):
+    # El PDF se construye en memoria; no deja copias de información institucional
+    # en el disco del servidor. Las celdas escapan texto antes de crear párrafos.
     salida = BytesIO()
     documento = SimpleDocTemplate(
         salida,
@@ -214,6 +221,7 @@ def exportar_pdf(spec, filas, metadata):
 
     ancho_util = landscape(A4)[0] - 20 * mm
     anchos = [ancho_util / max(len(spec.columnas), 1)] * len(spec.columnas)
+    # Repite los títulos cuando la tabla ocupa varias páginas.
     tabla = Table(datos, repeatRows=1, colWidths=anchos)
     tabla.setStyle(
         TableStyle(

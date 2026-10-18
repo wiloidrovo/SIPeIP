@@ -13,6 +13,8 @@ export function LoginPage() {
   const [error, setError] = useState("");
   const navigate = useNavigate();
   const location = useLocation();
+  // Retoma la ruta solicitada antes del login; la protección de ruta comprobará
+  // después si la cuenta tiene el permiso correspondiente.
   const destination =
     (location.state as { from?: string } | null)?.from ?? "/dashboard";
 

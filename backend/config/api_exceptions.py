@@ -54,6 +54,7 @@ def sipeip_exception_handler(exc, context):
 
     response = exception_handler(exc, context)
 
+    # El detalle técnico queda en el registro del servidor, no en la respuesta.
     if response is None:
         logger.error(
             "Error no controlado al procesar una solicitud de la API.",

@@ -27,6 +27,7 @@ MAX_FILAS_REPORTE = 5000
 
 @dataclass(frozen=True)
 class DatasetSpec:
+    # La vista previa y las exportaciones comparten columnas, permisos y origen.
     codigo: str
     nombre: str
     descripcion: str
@@ -55,6 +56,7 @@ def _ods_objetivo(objetivo):
 
 
 def _aplicar_filtro_entidad(queryset, filtros, lookup):
+    # Recibe un queryset ya limitado por el usuario; el filtro nunca amplía acceso.
     entidad_id = filtros.get("entidad")
     if entidad_id:
         return queryset.filter(**{f"{lookup}_id": entidad_id})

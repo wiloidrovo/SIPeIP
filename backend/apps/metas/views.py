@@ -652,6 +652,8 @@ class IndicadorViewSet(AuditoriaModelViewSetMixin, viewsets.ModelViewSet):
             if conflicto is not None:
                 return conflicto
 
+            # El indicador procede de la URL autorizada y el autor de la sesión;
+            # ninguno de los dos queda a elección del cuerpo enviado.
             data = request.data.copy()
             data["indicador"] = indicador.id
 
@@ -663,6 +665,8 @@ class IndicadorViewSet(AuditoriaModelViewSetMixin, viewsets.ModelViewSet):
             avance = serializer.save(registrado_por=request.user)
 
             antes = serializar_instancia(indicador)
+            # Un corte histórico se conserva, pero no reemplaza la medición
+            # más reciente que alimenta el valor actual del indicador.
             ultimo_avance = indicador.avances.order_by(
                 "-fecha_registro", "-fecha_creacion", "-id"
             ).first()
@@ -897,6 +901,8 @@ class IndicadorViewSet(AuditoriaModelViewSetMixin, viewsets.ModelViewSet):
 
 
 class AvanceIndicadorViewSet(viewsets.ReadOnlyModelViewSet):
+    # La escritura pasa por registrar_avance para mantener juntos el historial,
+    # el valor actual y la auditoría dentro de una misma transacción.
     """
     API de solo lectura para consultar avances registrados.
 

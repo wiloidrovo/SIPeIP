@@ -11,6 +11,7 @@ class EstadoCatalogo(models.TextChoices):
 
 
 def _normalizar_textos(instancia, *, incluye_codigo=True):
+    # Unifica la escritura de los catálogos; ODS usa número en lugar de código.
     if incluye_codigo:
         instancia.codigo = (instancia.codigo or "").strip().upper()
     instancia.nombre = (instancia.nombre or "").strip()
@@ -20,6 +21,8 @@ def _normalizar_textos(instancia, *, incluye_codigo=True):
 class ObjetivoEstrategico(models.Model):
     """Objetivo estratégico definido dentro de una entidad institucional."""
 
+    # El objetivo pertenece a una institución; sus metas y alineaciones heredan
+    # esta pertenencia para evitar cruces de información entre entidades.
     entidad = models.ForeignKey(
         "configuracion.EntidadInstitucional",
         on_delete=models.PROTECT,
@@ -76,6 +79,8 @@ class ObjetivoEstrategico(models.Model):
 class EjePND(models.Model):
     """Eje configurable de un Plan Nacional de Desarrollo."""
 
+    # Catálogo común: no pertenece a una institución ni carga datos oficiales
+    # automáticamente. Sus objetivos se vinculan mediante ObjetivoPND.eje.
     codigo = models.CharField(max_length=50)
     nombre = models.CharField(max_length=200)
     descripcion = models.TextField(blank=True)
@@ -126,6 +131,7 @@ class EjePND(models.Model):
 class ObjetivoPND(models.Model):
     """Objetivo configurable perteneciente a un eje PND."""
 
+    # PROTECT impide retirar el eje si ya contiene objetivos utilizados.
     eje = models.ForeignKey(
         EjePND,
         on_delete=models.PROTECT,
@@ -184,6 +190,7 @@ class ObjetivoPND(models.Model):
 class ODS(models.Model):
     """Objetivo de Desarrollo Sostenible configurable por administradores."""
 
+    # El número identifica cada ODS; el contenido se administra en el catálogo.
     numero = models.PositiveSmallIntegerField(
         unique=True,
         validators=[MinValueValidator(1, "El número del ODS debe ser positivo.")],
@@ -256,6 +263,7 @@ class Alineacion(models.Model):
         on_delete=models.PROTECT,
         related_name="alineaciones",
     )
+    # Explica la contribución institucional; no es una medición de cumplimiento.
     justificacion = models.TextField()
     estado = models.CharField(
         max_length=10,
@@ -268,6 +276,8 @@ class Alineacion(models.Model):
         on_delete=models.PROTECT,
         related_name="alineaciones_creadas",
     )
+    # Se completa al resolver la alineación. La restricción de estado exige
+    # un responsable tanto para validar como para rechazar.
     usuario_validador = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
@@ -310,6 +320,7 @@ class Alineacion(models.Model):
 
     @property
     def entidad_id(self):
+        # Se deriva del objetivo para no mantener otra entidad que pueda divergir.
         return self.objetivo_estrategico.entidad_id
 
     @property

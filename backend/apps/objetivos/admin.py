@@ -3,6 +3,8 @@ from django.contrib import admin
 from .models import Alineacion, EjePND, ObjetivoEstrategico, ObjetivoPND, ODS
 
 
+# Organiza la consulta técnica de objetivos, catálogos y alineaciones;
+# las operaciones del flujo se realizan en la API, no en este panel.
 @admin.register(ObjetivoEstrategico)
 class ObjetivoEstrategicoAdmin(admin.ModelAdmin):
     list_display = (

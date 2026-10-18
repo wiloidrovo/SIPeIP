@@ -20,6 +20,8 @@ export type SelectFilterContext = {
   editing: ApiRecord | null;
 };
 
+// Cada módulo describe sus campos aquí; ResourcePage resuelve el formulario,
+// la carga de opciones y la conversión del payload sin duplicar esa lógica.
 export type ResourceField = {
   name: string;
   label: string;
@@ -160,6 +162,8 @@ function resolveSelectOptions(
   editing: ApiRecord | null,
   fallback: SelectOption[] = [],
 ) {
+  // Al editar conserva una opción inactiva ya vinculada, pero no la ofrece
+  // como nueva selección. Los filtros de dependencia siguen aplicándose.
   const context: SelectFilterContext = {
     values,
     options: optionMap,
@@ -256,6 +260,8 @@ export function ResourcePage(props: ResourcePageProps) {
   }, [canCreateRecords, canEditRecords, props.fields, props.filters]);
 
   function updateFormValue(fieldName: string, value: unknown) {
+    // Cambiar entidad o plan puede invalidar un selector dependiente. Limpia
+    // únicamente esa selección; conserva el resto de lo escrito en el formulario.
     setForm((current) => {
       const next = { ...current, [fieldName]: value };
       const fields = props.fields ?? [];
@@ -366,6 +372,7 @@ export function ResourcePage(props: ResourcePageProps) {
   }
 
   async function runAction(record: ApiRecord, action: ResourceAction) {
+    // Separa consultas, acciones con datos y confirmaciones antes de enviar.
     if (action.method === "GET") {
       setSaving(true);
       try {
@@ -455,6 +462,7 @@ export function ResourcePage(props: ResourcePageProps) {
     }
   }
 
+  // Estos controles orientan la interfaz; no sustituyen las reglas del backend.
   const hasRowActions = Boolean(
     (props.editPermission && hasPermission(props.editPermission))
       || (props.deletePermission && hasPermission(props.deletePermission))
@@ -552,6 +560,8 @@ export function ResourcePage(props: ResourcePageProps) {
               editing && field.readOnlyOnEdit,
             ) || waitingForOptions || Boolean(loadState?.error) || selectOptions.length === 0;
 
+            // La clave estable conserva el mismo control al escribir. No definir
+            // un componente nuevo dentro del render: desmontaría el campo y su foco.
             return (
               <label key={field.name}>
                 <span>{field.label}{field.required ? " *" : ""}</span>
@@ -649,6 +659,7 @@ export function optionsFrom(
   return async () => {
     const payload = await apiRequest<ApiRecord[] | { results: ApiRecord[] }>(path, { notify: false });
     const records = normalizeList(payload);
+    // Conserva el registro de origen para filtrar por entidad, plan u otra relación.
     return records.map((record) => ({
       value: record.id,
       label: label(record),

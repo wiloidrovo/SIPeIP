@@ -3,6 +3,8 @@
 from rest_framework.permissions import BasePermission
 
 
+# Catálogo único de acciones reconocidas. La autorización comprueba que el
+# permiso exigido por la vista figure aquí y entre los permisos del usuario.
 ALLOWED_ROLE_PERMISSIONS = (
     "usuarios.ver",
     "usuarios.crear",
@@ -72,6 +74,8 @@ PERMISOS_ROLES = {
 }
 
 
+# Valores que utiliza inicializar_rbac; las peticiones consultan los permisos
+# efectivos del usuario, no el nombre visible ni esta definición inicial.
 BASE_ROLES = {
     "administrador_sistema": {
         "nombre": "Administrador del Sistema",
@@ -286,6 +290,7 @@ class HasSipeipPermission(BasePermission):
             else getattr(view, "required_permission", None)
         )
 
+        # Una acción nueva queda cerrada hasta que tenga un permiso explícito.
         if permiso_requerido not in ALLOWED_ROLE_PERMISSIONS:
             return False
 

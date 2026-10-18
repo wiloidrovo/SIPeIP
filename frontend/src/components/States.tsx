@@ -1,3 +1,5 @@
+// Estados compartidos para que carga, ausencia de datos y mensajes se
+// presenten de la misma forma y sean anunciados por lectores de pantalla.
 export function LoadingState({
   label = "Cargando",
   fullPage = false,

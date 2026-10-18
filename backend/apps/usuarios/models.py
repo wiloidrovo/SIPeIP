@@ -29,6 +29,8 @@ class Usuario(AbstractUser):
         default=EstadoUsuario.ACTIVO,
     )
     telefono = models.CharField(max_length=20, blank=True)
+    # La adscripción define el ámbito institucional. PROTECT conserva las
+    # relaciones aunque se intente eliminar una entidad o una unidad en uso.
     entidad = models.ForeignKey(
         "configuracion.EntidadInstitucional",
         on_delete=models.PROTECT,
@@ -48,6 +50,8 @@ class Usuario(AbstractUser):
         verbose_name = "Usuario"
         verbose_name_plural = "Usuarios"
         ordering = ["username"]
+        # Impide cuentas duplicadas que solo difieran en mayúsculas; el correo
+        # vacío queda fuera de la restricción para admitir usuarios sin correo.
         constraints = [
             models.UniqueConstraint(
                 Lower("username"),
@@ -67,6 +71,7 @@ class Usuario(AbstractUser):
 
         permisos_catalogo = set(ALLOWED_ROLE_PERMISSIONS)
 
+        # El bloqueo de la cuenta se aplica también al superusuario técnico.
         if not self.is_active or self.estado != self.EstadoUsuario.ACTIVO:
             return set()
 
@@ -88,6 +93,7 @@ class Usuario(AbstractUser):
         if not isinstance(permisos_rol, list):
             return set()
 
+        # Ignora códigos retirados o desconocidos que pudieran quedar guardados.
         return permisos_catalogo.intersection(permisos_rol)
 
     def clean(self):
@@ -95,6 +101,7 @@ class Usuario(AbstractUser):
         self._validar_adscripcion()
 
     def _validar_adscripcion(self):
+        # La unidad no puede pertenecer a una institución distinta de la cuenta.
         if self.unidad_organizacional_id and (
             self.entidad_id is None
             or self.unidad_organizacional.entidad_id != self.entidad_id
@@ -108,6 +115,7 @@ class Usuario(AbstractUser):
             )
 
     def save(self, *args, **kwargs):
+        # También se comprueba la adscripción al guardar fuera de los formularios.
         self._validar_adscripcion()
         return super().save(*args, **kwargs)
 

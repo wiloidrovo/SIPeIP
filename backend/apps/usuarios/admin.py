@@ -4,6 +4,8 @@ from django.contrib.auth.admin import UserAdmin
 from .models import Usuario
 
 
+# Amplía la ficha estándar de Django con adscripción y rol institucional.
+# El sitio técnico restringe el acceso y mantiene la consulta de solo lectura.
 @admin.register(Usuario)
 class UsuarioAdmin(UserAdmin):
     """Configuración del panel administrativo de Django para el modelo Usuario."""

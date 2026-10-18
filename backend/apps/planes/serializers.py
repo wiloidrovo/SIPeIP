@@ -37,6 +37,7 @@ class HistorialEstadoPlanSerializer(serializers.ModelSerializer):
 
 
 class TransicionPlanSerializer(serializers.Serializer):
+    # La acción decide si el motivo es obligatorio; el cliente no puede elegirlo.
     observacion = serializers.CharField(
         required=False,
         allow_blank=True,

@@ -26,6 +26,7 @@ ESTADOS_EN_REVISION = frozenset(
 
 
 def _ruta_plan(plan_lookup, campo):
+    # Compone la ruta ORM para reutilizar el alcance en planes y registros hijos.
     prefijo = f"{plan_lookup}__" if plan_lookup else ""
     return f"{prefijo}{campo}"
 
@@ -53,6 +54,8 @@ def filtrar_queryset_por_alcance_plan(queryset, usuario, plan_lookup=""):
     if entidad_id is None:
         return queryset.none()
 
+    # La bandeja interinstitucional se limita a revisión e intervenciones previas;
+    # no convierte al supervisor en un lector global de todos los borradores.
     if alcance == "REVISION_ENTIDAD":
         return queryset.filter(
             Q(**{_ruta_plan(plan_lookup, "entidad_id"): entidad_id})

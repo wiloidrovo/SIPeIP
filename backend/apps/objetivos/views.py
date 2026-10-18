@@ -595,6 +595,8 @@ class AlineacionViewSet(
         return Response(self.get_serializer(alineacion).data)
 
     def _resolver(self, nuevo_estado, accion_auditoria):
+        # La alineación pertenece al objetivo y puede servir a varias metas.
+        # Además del permiso, exige una revisión asignada que utilice ese objetivo.
         with transaction.atomic():
             alineacion = self._obtener_bloqueada()
             if alineacion.estado != Alineacion.EstadoAlineacion.BORRADOR:

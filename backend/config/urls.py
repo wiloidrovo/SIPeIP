@@ -3,6 +3,8 @@ from django.contrib import admin
 from django.urls import include, path
 
 
+# Los routers de metas, objetivos y proyectos ya incluyen el nombre del recurso;
+# por eso se montan en /api/ y no se repite aquí un prefijo de módulo.
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("api/auth/", include("apps.autenticacion.urls")),

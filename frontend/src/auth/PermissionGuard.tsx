@@ -12,6 +12,7 @@ export function PermissionGuard({
   fallback?: ReactNode;
 }>) {
   const { hasPermission, hasAllPermissions } = useAuth();
+  // Control visual únicamente; la API vuelve a comprobar permiso y alcance.
   const visible = permission ? hasPermission(permission) : hasAllPermissions(all);
   return visible ? <>{children}</> : <>{fallback}</>;
 }

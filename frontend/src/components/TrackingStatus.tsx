@@ -43,6 +43,7 @@ function statusTone(code?: string) {
 }
 
 export function clampProgress(value: unknown): number | null {
+  // Acota la barra visual; el cálculo de cumplimiento procede del backend.
   if (value === null || value === undefined || value === "") return null;
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) return null;
@@ -93,6 +94,7 @@ function asObject(value: unknown): Record<string, unknown> | null {
 }
 
 function extractOds(value: unknown): OdsSummary[] {
+  // Un mismo ODS puede aparecer en varias alineaciones; se muestra una sola vez.
   if (!Array.isArray(value)) return [];
   const byId = new Map<string, OdsSummary>();
   for (const item of value) {

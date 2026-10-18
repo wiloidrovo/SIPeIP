@@ -274,6 +274,8 @@ class ProyectoInversionViewSet(viewsets.ModelViewSet):
         )
 
     def _bloquear_y_revalidar_relaciones(self, serializer):
+        # Relee las relaciones bajo bloqueo antes de guardar: una entidad,
+        # tipología o plan pudo quedar inactivo después de la validación inicial.
         datos = dict(serializer.validated_data)
         for campo in (
             "entidad",
@@ -554,6 +556,8 @@ class ProyectoInversionViewSet(viewsets.ModelViewSet):
                 registrado_por=request.user,
             )
 
+            # Los porcentajes son cortes acumulados, no incrementos que se suman.
+            # Registrar una fecha anterior no modifica el consolidado vigente.
             es_corte_mas_reciente = (
                 ultimo_previo is None
                 or seguimiento.fecha_registro > ultimo_previo.fecha_registro

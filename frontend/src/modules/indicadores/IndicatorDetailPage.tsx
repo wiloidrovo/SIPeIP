@@ -219,6 +219,8 @@ export function IndicatorDetailPage() {
     && indicador.activo
     && indicador.validado
     && plan?.estado === "APROBADO";
+  // Validar confirma la ficha, no el cumplimiento. Requiere el permiso separado
+  // y ser quien inició la revisión, salvo el superusuario técnico.
   const canValidate = hasPermission("indicadores.validar")
     && indicador.activo
     && !indicador.validado

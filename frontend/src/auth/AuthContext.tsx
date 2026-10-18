@@ -24,6 +24,8 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+// Conserva la identidad y los permisos en memoria. La cookie de sesión la
+// administra el navegador y no se copian credenciales a localStorage.
 export function AuthProvider({ children }: PropsWithChildren) {
   const [user, setUser] = useState<SessionUser | null>(null);
   const [loading, setLoading] = useState(true);
@@ -84,6 +86,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
         renewing.current = false;
       }
     };
+    // Renueva mientras la cuenta sigue abierta y al volver a la pestaña.
+    // Un 401 elimina la identidad local y deja actuar a las rutas protegidas.
     const interval = window.setInterval(renew, 8 * 60 * 1000);
     const onVisible = () => {
       if (document.visibilityState === "visible") void renew();

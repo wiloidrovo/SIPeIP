@@ -14,6 +14,8 @@ from .services import calcular_seguimiento_indicador, calcular_seguimiento_meta
 
 
 def _validar_alcance_plan(serializer, plan):
+    # Un ID válido no basta: el plan relacionado también debe estar dentro
+    # de la institución y, cuando corresponda, ser propio o asignado al actor.
     request = serializer.context.get("request")
     usuario = getattr(request, "user", None)
     if not usuario_puede_acceder_entidad(usuario, plan.entidad_id):
@@ -80,6 +82,8 @@ class MetaSerializer(serializers.ModelSerializer):
             "fecha_creacion",
             "fecha_actualizacion",
         ]
+        # El CRUD modifica la definición; los estados cambian por acciones y
+        # los porcentajes se calculan a partir de indicadores y mediciones.
         read_only_fields = [
             "id",
             "plan_detalle",

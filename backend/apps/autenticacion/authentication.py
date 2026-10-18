@@ -14,7 +14,9 @@ class SipeipSessionAuthentication(SessionAuthentication):
         ):
             return None
 
+        # Mantiene la comprobación CSRF de SessionAuthentication para escrituras.
         return super().authenticate(request)
 
     def authenticate_header(self, request):
+        # DRF necesita esta cabecera para responder 401 y no convertirlo en 403.
         return "Session"

@@ -204,6 +204,7 @@ class MigracionSeguimientoMetasTests(TransactionTestCase):
         super().setUp()
         executor = MigrationExecutor(connection)
         executor.migrate([self.migrate_from])
+        # Usa modelos de esa versión histórica, no las clases runtime actuales.
         apps = executor.loader.project_state([self.migrate_from]).apps
 
         Entidad = apps.get_model("configuracion", "EntidadInstitucional")
@@ -277,6 +278,7 @@ class MigracionSeguimientoMetasTests(TransactionTestCase):
         )
 
     def tearDown(self):
+        # Restaura el esquema final de la base de pruebas para los casos siguientes.
         executor = MigrationExecutor(connection)
         executor.migrate(executor.loader.graph.leaf_nodes())
         super().tearDown()

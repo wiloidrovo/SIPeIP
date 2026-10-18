@@ -67,6 +67,7 @@ class RolSerializer(serializers.ModelSerializer):
         ]
 
     def get_usuarios_count(self, obj):
+        # Reutiliza el conteo de la consulta para evitar una consulta por cada rol.
         if hasattr(obj, "usuarios_count_anotado"):
             return obj.usuarios_count_anotado
         return obj.usuarios.count()
@@ -101,6 +102,8 @@ class AsignarPermisosRolSerializer(serializers.Serializer):
 
 
 class ConfigurarAlcanceRolSerializer(serializers.Serializer):
+    # Entrada de la acción específica; la vista comprueba quién puede delegar
+    # ese alcance antes de guardarlo en el rol.
     alcance = serializers.ChoiceField(
         choices=Rol.Alcance.choices,
         error_messages={
@@ -111,6 +114,7 @@ class ConfigurarAlcanceRolSerializer(serializers.Serializer):
 
 
 class RolResumenSerializer(serializers.ModelSerializer):
+    # Representación breve para incluir el rol en otras respuestas sin su catálogo.
     class Meta:
         model = Rol
         fields = [

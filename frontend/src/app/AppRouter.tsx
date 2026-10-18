@@ -23,6 +23,7 @@ import { NotAuthorizedPage } from "../pages/NotAuthorizedPage";
 import { NotFoundPage } from "../pages/NotFoundPage";
 
 function Secured({ permission, children }: { permission: string; children: React.ReactNode }) {
+  // Comparte el layout y exige el permiso incluso al escribir la URL directamente.
   return <Route element={<ProtectedRoute permissions={[permission]} />}><Route element={<AppLayout />}>{children}</Route></Route>;
 }
 

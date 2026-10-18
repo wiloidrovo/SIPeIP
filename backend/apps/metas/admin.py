@@ -3,6 +3,8 @@ from django.contrib import admin
 from .models import AvanceIndicador, Indicador, Meta
 
 
+# Se muestran por separado el resultado esperado, su ficha de medición y
+# sus cortes históricos. El sitio administrativo no permite modificarlos.
 @admin.register(Meta)
 class MetaAdmin(admin.ModelAdmin):
     """Configuración administrativa para metas institucionales."""

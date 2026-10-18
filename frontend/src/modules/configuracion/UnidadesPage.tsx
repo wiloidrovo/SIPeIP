@@ -19,6 +19,8 @@ function unitMatchesSelectedEntity(
   option: SelectOption,
   context: SelectFilterContext,
 ) {
+  // Descarta la propia unidad y las de otra entidad. Los ciclos indirectos
+  // se comprueban en el backend recorriendo la jerarquía completa.
   if (context.editing && String(option.value) === String(context.editing.id)) {
     return false;
   }

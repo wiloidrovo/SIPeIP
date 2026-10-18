@@ -26,6 +26,7 @@ export function AppLayout() {
     }
   }
 
+  // Elimina también los grupos sin enlaces autorizados para evitar menús vacíos.
   const visibleGroups = navigation
     .map((group) => ({
       ...group,

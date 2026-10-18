@@ -5,6 +5,7 @@ from .views import CsrfView, LoginView, LogoutView, MeView, RefreshView
 
 app_name = "autenticacion"
 
+# Se incluye bajo /api/auth/. Cada vista controla su método, sesión y CSRF.
 urlpatterns = [
     path("csrf/", CsrfView.as_view(), name="csrf"),
     path("login/", LoginView.as_view(), name="login"),

@@ -3,6 +3,7 @@ from django.contrib import admin
 from .models import EventoAuditoria
 
 
+# La bitácora se consulta con filtros; se bloquean alta, edición y borrado.
 @admin.register(EventoAuditoria)
 class EventoAuditoriaAdmin(admin.ModelAdmin):
     list_display = (

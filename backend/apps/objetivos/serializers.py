@@ -53,6 +53,8 @@ def _resumen_usuario(usuario):
 def _planes_visibles(serializer):
     """Obtiene el alcance real de planes para agregados y relaciones."""
 
+    # Reutiliza el queryset en los conteos de esta respuesta; no guarda datos
+    # de una sesión para otra ni cuenta planes fuera del alcance del solicitante.
     cache = getattr(serializer, "_planes_visibles_cache", None)
     if cache is not None:
         return cache
@@ -101,6 +103,8 @@ class _CatalogoTextoSerializer(serializers.ModelSerializer):
 
 
 class ObjetivoEstrategicoSerializer(_CatalogoTextoSerializer):
+    # Combina la ficha editable con resúmenes de uso. Los conteos son de salida
+    # y nunca se aceptan como datos enviados por el formulario.
     entidad = serializers.PrimaryKeyRelatedField(
         queryset=EntidadInstitucional.objects.all()
     )
@@ -211,6 +215,8 @@ class ObjetivoEstrategicoSerializer(_CatalogoTextoSerializer):
 
 
 class EjePNDSerializer(_CatalogoTextoSerializer):
+    # El código del eje es único sin distinguir mayúsculas; estado se cambia
+    # mediante una acción específica y no al editar los textos del catálogo.
     class Meta:
         model = EjePND
         fields = [
@@ -242,6 +248,7 @@ class EjePNDSerializer(_CatalogoTextoSerializer):
 
 
 class ObjetivoPNDSerializer(_CatalogoTextoSerializer):
+    # Recibe el ID del eje y devuelve también su descripción para los selectores.
     eje = serializers.PrimaryKeyRelatedField(queryset=EjePND.objects.all())
     eje_detalle = serializers.SerializerMethodField()
 
@@ -310,6 +317,7 @@ class ObjetivoPNDSerializer(_CatalogoTextoSerializer):
 
 
 class ODSSerializer(serializers.ModelSerializer):
+    # El número identifica al ODS y se valida sin sustituirlo por un código interno.
     class Meta:
         model = ODS
         fields = [
@@ -349,6 +357,8 @@ class ODSSerializer(serializers.ModelSerializer):
 
 
 class AlineacionSerializer(serializers.ModelSerializer):
+    # Los IDs mantienen las relaciones; los campos *_detalle permiten presentar
+    # la cadena estratégica sin pedir por separado cada catálogo.
     entidad = serializers.IntegerField(
         source="objetivo_estrategico.entidad_id",
         read_only=True,
@@ -482,6 +492,8 @@ class AlineacionSerializer(serializers.ModelSerializer):
         )
 
     def get_puede_resolver(self, obj):
+        # Informa si existe una revisión asignada. No sustituye al permiso de
+        # validar/rechazar, que la vista exige al ejecutar la acción.
         request = self.context.get("request")
         usuario = getattr(request, "user", None)
         if not usuario or not usuario.is_authenticated:

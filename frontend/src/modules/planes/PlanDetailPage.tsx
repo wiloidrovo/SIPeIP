@@ -71,6 +71,8 @@ const REVIEW_ACTIONS: ReviewAction[] = [
   },
 ];
 
+// Estados que habilitan cada botón. El backend comprueba otra vez la transición
+// bajo bloqueo y no acepta cambiar el estado mediante una edición ordinaria.
 const ACTION_STATES: Record<ReviewAction["endpoint"], string[]> = {
   "enviar-a-revision": ["BORRADOR", "DEVUELTO", "RECHAZADO"],
   revisar: ["EN_REVISION"],
@@ -437,6 +439,7 @@ export function PlanDetailPage() {
     setLoading(true);
     setError("");
     try {
+      // Una respuesta reúne contenido, seguimiento y bloqueos del mismo expediente.
       const dossierResponse = await planningApi.dossier(numericPlanId);
       setDossier(dossierResponse);
       setTracking({
@@ -462,6 +465,7 @@ export function PlanDetailPage() {
   const availableActions = useMemo(() => {
     const state = dossier?.plan.estado;
     if (!state) return [];
+    // Tener permiso para resolver no permite tomar la revisión de otro supervisor.
     const reviewerId = dossier.plan.revisor_detalle?.id;
     return REVIEW_ACTIONS.filter(
       (action) =>

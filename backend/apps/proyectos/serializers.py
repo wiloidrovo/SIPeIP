@@ -507,6 +507,8 @@ class HitoProyectoSerializer(serializers.ModelSerializer):
         otros = HitoProyecto.objects.filter(proyecto=proyecto)
         if instance:
             otros = otros.exclude(pk=instance.pk)
+        # Al editar, suma los demás hitos y el nuevo peso, no el peso anterior
+        # del mismo hito. El cronograma completo no puede superar el 100 %.
         acumulado = otros.aggregate(total=Sum("porcentaje_planificado"))["total"] or Decimal("0")
         if acumulado + porcentaje > Decimal("100"):
             errores["porcentaje_planificado"] = (

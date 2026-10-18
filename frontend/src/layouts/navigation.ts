@@ -7,6 +7,8 @@ export type NavigationItem = {
 
 export type NavigationGroup = { label: string; items: NavigationItem[] };
 
+// Etiquetas y rutas del menú. Los permisos deben coincidir con AppRouter;
+// ocultar un enlace no protege por sí solo su dirección ni su endpoint.
 export const navigation: NavigationGroup[] = [
   {
     label: "Inicio",

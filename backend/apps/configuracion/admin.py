@@ -3,6 +3,8 @@ from django.contrib import admin
 from .models import EntidadInstitucional, UnidadOrganizacional
 
 
+# Configura columnas y búsquedas del panel técnico. El sitio definido en
+# config/admin.py mantiene estos registros en modo de solo lectura.
 @admin.register(EntidadInstitucional)
 class EntidadInstitucionalAdmin(admin.ModelAdmin):
     list_display = (

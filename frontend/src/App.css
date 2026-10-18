@@ -1,3 +1,5 @@
+/* Estilos del diseño anterior. main.tsx no los importa: la interfaz modular
+   utiliza styles/index.css y styles/menu.css. */
 :root {
   font-family: Arial, Helvetica, sans-serif;
   background: #f4f7fb;

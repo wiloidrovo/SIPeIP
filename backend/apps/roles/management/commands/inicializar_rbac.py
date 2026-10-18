@@ -17,6 +17,8 @@ class Command(BaseCommand):
 
         for codigo, definicion in BASE_ROLES.items():
             rol = Rol.objects.filter(codigo=codigo).first()
+            # Recupera roles anteriores por nombre solo para inicializarlos;
+            # la autorización cotidiana no utiliza estas comparaciones.
             politica_inicial = rol is None
 
             if rol is None:
@@ -47,6 +49,8 @@ class Command(BaseCommand):
             rol.codigo = codigo
             rol.nombre = definicion["nombre"]
             rol.descripcion = definicion["descripcion"]
+            # Reaplica el catálogo base de permisos. Un alcance ya configurado
+            # se conserva, salvo que el rol todavía no tuviera identidad base.
             rol.permisos = list(definicion["permisos"])
             if politica_inicial:
                 rol.alcance = definicion["alcance"]

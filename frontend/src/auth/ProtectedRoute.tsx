@@ -6,6 +6,7 @@ export function ProtectedRoute({ permissions = [] }: { permissions?: string[] })
   const { loading, isAuthenticated, hasAllPermissions } = useAuth();
   const location = useLocation();
 
+  // Espera la consulta de sesión antes de decidir: evita redirecciones prematuras.
   if (loading) return <LoadingState label="Verificando sesión" fullPage />;
   if (!isAuthenticated) {
     return <Navigate to="/login" replace state={{ from: location.pathname }} />;

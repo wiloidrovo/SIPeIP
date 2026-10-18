@@ -16,6 +16,8 @@ class AuditoriaFallosMiddleware:
 
     def __call__(self, request):
         response = self.get_response(request)
+        # Completa los rechazos que la vista no auditó, sin duplicar eventos
+        # ni leer el cuerpo de la petición (puede contener una contraseña).
         if (
             request.path.startswith("/api/")
             and request.method in METODOS_MUTACION

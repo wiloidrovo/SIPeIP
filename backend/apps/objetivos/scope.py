@@ -24,6 +24,8 @@ def filtrar_objetivos_por_alcance(queryset, usuario):
     if entidad_id is None:
         return queryset.none()
 
+    # Acceder al expediente incluye sus objetivos. distinct evita repetir un OEI
+    # que intervenga en varias metas o transiciones de un mismo plan.
     if alcance == "REVISION_ENTIDAD":
         return queryset.filter(
             Q(entidad_id=entidad_id)

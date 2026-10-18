@@ -12,6 +12,8 @@ class Plan(models.Model):
     mantener trazabilidad sobre quién administra o coordina el plan.
     """
 
+    # EN_REVISION corresponde a la bandeja; EN_REVISION_INICIADA ya tiene revisor.
+    # Las transiciones autorizadas se resuelven en la vista, no con un CRUD libre.
     class EstadoPlan(models.TextChoices):
         BORRADOR = "BORRADOR", "Borrador"
         EN_REVISION = "EN_REVISION", "En revisión"
@@ -25,6 +27,8 @@ class Plan(models.Model):
     descripcion = models.TextField(blank=True)
     periodo_inicio = models.DateField()
     periodo_fin = models.DateField()
+    # Responsable operativo y autor pueden ser personas distintas. Los campos
+    # de revisión y aprobación conservan quién tomó cada decisión posterior.
     responsable = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
@@ -67,6 +71,7 @@ class Plan(models.Model):
         default=EstadoPlan.BORRADOR,
     )
     activo = models.BooleanField(default=True)
+    # Las fechas del flujo se asignan en las acciones, no desde el formulario.
     fecha_envio_revision = models.DateTimeField(null=True, blank=True, editable=False)
     fecha_inicio_revision = models.DateTimeField(
         null=True,
@@ -76,6 +81,8 @@ class Plan(models.Model):
     fecha_aprobacion = models.DateTimeField(null=True, blank=True, editable=False)
     fecha_creacion = models.DateTimeField(auto_now_add=True)
     fecha_actualizacion = models.DateTimeField(auto_now=True)
+    # Las metas son el vínculo entre plan y objetivo. Usar la tabla intermedia
+    # evita mantener una segunda lista de objetivos que pueda quedar desactualizada.
     objetivos_estrategicos = models.ManyToManyField(
         "objetivos.ObjetivoEstrategico",
         through="metas.Meta",
@@ -87,6 +94,8 @@ class Plan(models.Model):
         verbose_name = "Plan"
         verbose_name_plural = "Planes"
         ordering = ["-fecha_creacion"]
+        # Además de validar en la API, la base protege el periodo y exige que
+        # revisor/aprobador se registren junto con sus respectivas fechas.
         constraints = [
             models.UniqueConstraint(
                 fields=["entidad", "nombre"],
@@ -175,6 +184,8 @@ class Plan(models.Model):
 
 
 class HistorialEstadoPlan(models.Model):
+    # Conserva quién tomó cada decisión, el cambio de estado y su justificación.
+    # PROTECT impide borrar el plan o el usuario y perder esa trazabilidad.
     plan = models.ForeignKey(
         Plan,
         on_delete=models.PROTECT,

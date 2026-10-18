@@ -51,6 +51,8 @@ class CsrfView(APIView):
         )
 
 
+# El login también exige CSRF aunque todavía no exista una sesión autenticada.
+# sensitive_post_parameters marca la contraseña como sensible para los informes de error.
 @method_decorator(never_cache, name="dispatch")
 @method_decorator(sensitive_post_parameters("password"), name="dispatch")
 @method_decorator(csrf_protect, name="dispatch")
@@ -100,6 +102,8 @@ class LoginView(APIView):
                 status=status.HTTP_401_UNAUTHORIZED,
             )
 
+        # Django guarda la sesión en el servidor; la respuesta no entrega un
+        # token de acceso para almacenar en el navegador.
         django_login(request._request, usuario)
         _renovar_expiracion(request._request)
         registrar_evento(
@@ -118,6 +122,8 @@ class LoginView(APIView):
 
 @method_decorator(never_cache, name="dispatch")
 class RefreshView(APIView):
+    # Solo renueva sesiones que siguen siendo válidas. Una sesión ya vencida
+    # debe volver a pasar por el inicio de sesión.
     authentication_classes = [SipeipSessionAuthentication]
     permission_classes = [IsAuthenticated]
 
@@ -143,6 +149,7 @@ class LogoutView(APIView):
             accion="LOGOUT",
             usuario=request.user,
         )
+        # Audita antes de vaciar la sesión para conservar la identidad del actor.
         django_logout(request._request)
         return Response(
             {"detail": "Sesión cerrada correctamente."},

@@ -2,6 +2,7 @@ import { useAuth } from "../../auth/AuthContext";
 import { ResourcePage } from "../../components/ResourcePage";
 
 export function EntidadesPage() {
+  // El ámbito mostrado explica la lista; el filtrado institucional lo hace la API.
   const { user } = useAuth();
   const scope = user?.rol?.alcance;
   const hasInstitutionalScope = Boolean(

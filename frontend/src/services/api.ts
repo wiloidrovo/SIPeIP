@@ -1,3 +1,5 @@
+// Mantener el mismo host que el frontend para no mezclar cookies de localhost
+// con las de 127.0.0.1 durante el desarrollo.
 export const API_ORIGIN = "http://localhost:8000";
 export const API_BASE_URL = `${API_ORIGIN}/api`;
 
@@ -30,6 +32,8 @@ type RequestOptions = RequestInit & {
   notify?: boolean;
 };
 
+// Las promesas compartidas evitan repetir CSRF o renovación cuando varias
+// pantallas solicitan datos al mismo tiempo. Solo viven durante esta página.
 let csrfToken = "";
 let csrfPromise: Promise<string> | null = null;
 let refreshPromise: Promise<boolean> | null = null;
@@ -74,6 +78,7 @@ export function formatApiError(payload: unknown): string {
 }
 
 async function parseResponse(response: Response): Promise<unknown> {
+  // Nunca traslada una página HTML de error del servidor a la interfaz.
   if (response.status === 204) return null;
   const contentType = response.headers.get("content-type") ?? "";
   if (!contentType.includes("application/json")) {
@@ -180,6 +185,7 @@ async function execute<T>(path: string, options: RequestOptions): Promise<T> {
     );
   }
 
+  // Un único reintento por solicitud; evita encadenar renovaciones indefinidas.
   if (response.status === 401 && options.retryAuth !== false) {
     const refreshed = await refreshSession();
     if (refreshed) {
@@ -200,6 +206,7 @@ async function execute<T>(path: string, options: RequestOptions): Promise<T> {
       data,
     );
   }
+  // El cambio de sesión puede invalidar el token CSRF que estaba en memoria.
   if (["/auth/login/", "/auth/logout/"].includes(path)) {
     csrfToken = "";
   }
@@ -248,6 +255,7 @@ export function normalizeList<T>(payload: T[] | { results: T[] }): T[] {
   return Array.isArray(payload) ? payload : payload.results;
 }
 
+// Convención compartida de CRUD y acciones: cada módulo aporta su ruta base.
 export const resourceApi = <T extends ApiRecord>(basePath: string) => ({
   list: async (search = "", filters: Record<string, unknown> = {}) => {
     const params = new URLSearchParams();

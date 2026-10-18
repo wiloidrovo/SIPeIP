@@ -6,6 +6,8 @@ import sys
 
 def main():
     """Run administrative tasks."""
+    # Carga la configuración normal salvo que el comando indique otra,
+    # como --settings=config.settings_test para la base aislada de pruebas.
     os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
     try:
         from django.core.management import execute_from_command_line

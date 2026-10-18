@@ -13,6 +13,7 @@ ALCANCES_RECONOCIDOS = ALCANCES_GLOBALES | ALCANCES_INSTITUCIONALES
 def obtener_alcance_usuario(usuario):
     """Obtiene un alcance válido solo para una identidad operativa."""
 
+    # Una identidad inactiva no recupera acceso por tener un rol global o técnico.
     if not getattr(usuario, "is_authenticated", False):
         return None
     if not getattr(usuario, "is_active", False):

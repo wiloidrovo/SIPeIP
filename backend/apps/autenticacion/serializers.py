@@ -13,6 +13,8 @@ class LoginSerializer(serializers.Serializer):
             "required": "El nombre de usuario es obligatorio.",
         },
     )
+    # La contraseña solo entra en la petición: no se devuelve ni se recortan
+    # sus espacios, porque también pueden formar parte de la credencial.
     password = serializers.CharField(
         allow_blank=False,
         max_length=128,
@@ -59,6 +61,7 @@ class UsuarioSesionSerializer(serializers.Serializer):
         }
 
     def get_permisos(self, obj):
+        # Devuelve permisos efectivos, no la lista del rol sin verificar su estado.
         return sorted(set(obj.get_sipeip_permissions()))
 
     def get_institucion(self, obj):

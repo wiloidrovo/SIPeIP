@@ -8,6 +8,7 @@ from django.db.models.functions import Lower
 from django.utils import timezone
 
 
+# Decimal evita errores de precisión al validar porcentajes y presupuesto.
 PORCENTAJE_MINIMO = Decimal("0.00")
 PORCENTAJE_MAXIMO = Decimal("100.00")
 VALIDADORES_PORCENTAJE = [
@@ -25,6 +26,7 @@ VALIDADORES_PORCENTAJE = [
 class TipologiaIntervencion(models.Model):
     """Catálogo configurable de tipologías para proyectos de inversión."""
 
+    # Se desactiva sin eliminar las clasificaciones de proyectos existentes.
     codigo = models.CharField(max_length=50)
     nombre = models.CharField(max_length=150)
     descripcion = models.TextField(blank=True)
@@ -83,6 +85,8 @@ class ProyectoInversion(models.Model):
         FINALIZADO = "FINALIZADO", "Finalizado"
         ARCHIVADO = "ARCHIVADO", "Archivado"
 
+    # Plan, objetivo y responsable deben pertenecer a esta misma institución.
+    # Las relaciones protegidas mantienen el contexto del proyecto y su historia.
     entidad = models.ForeignKey(
         "configuracion.EntidadInstitucional",
         on_delete=models.PROTECT,
@@ -120,6 +124,8 @@ class ProyectoInversion(models.Model):
     )
     fecha_inicio = models.DateField()
     fecha_fin = models.DateField()
+    # El presupuesto es un monto; los avances físico y financiero son porcentajes
+    # acumulados del último corte, no valores monetarios ni incrementos a sumar.
     presupuesto_estimado = models.DecimalField(max_digits=16, decimal_places=2)
     avance_fisico = models.DecimalField(
         max_digits=5,
@@ -259,11 +265,13 @@ class HitoProyecto(models.Model):
         on_delete=models.PROTECT,
         related_name="hitos",
     )
+    # El orden organiza el cronograma dentro del proyecto y no puede repetirse.
     orden = models.PositiveIntegerField()
     nombre = models.CharField(max_length=200)
     descripcion = models.TextField(blank=True)
     fecha_inicio_planificada = models.DateField()
     fecha_fin_planificada = models.DateField()
+    # Participación prevista del hito; no representa su avance ejecutado.
     porcentaje_planificado = models.DecimalField(
         max_digits=5,
         decimal_places=2,
@@ -355,6 +363,7 @@ class SeguimientoProyecto(models.Model):
         on_delete=models.PROTECT,
         related_name="seguimientos",
     )
+    # Puede registrarse un corte general o asociarlo a un hito del mismo proyecto.
     hito = models.ForeignKey(
         HitoProyecto,
         on_delete=models.PROTECT,
@@ -362,6 +371,8 @@ class SeguimientoProyecto(models.Model):
         null=True,
         blank=True,
     )
+    # Solo se admite un corte por proyecto y fecha. La fecha de creación conserva
+    # cuándo se ingresó, aunque la medición corresponda a un día anterior.
     fecha_registro = models.DateField(default=timezone.localdate)
     avance_fisico = models.DecimalField(
         max_digits=5,

@@ -181,6 +181,8 @@ class RolViewSet(AuditoriaModelViewSetMixin, viewsets.ModelViewSet):
                 raise PermissionDenied(
                     "Solo un superusuario puede configurar acceso técnico total."
                 )
+            # Poder administrar roles no permite otorgar capacidades superiores
+            # a las propias; la comprobación usa códigos, no nombres de perfil.
             delegables = set(request.user.get_sipeip_permissions())
             if not solicitados.issubset(delegables):
                 raise PermissionDenied(

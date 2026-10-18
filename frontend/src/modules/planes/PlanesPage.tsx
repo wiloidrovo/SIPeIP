@@ -38,6 +38,8 @@ function alignmentValue(item: Record<string, unknown>) {
 }
 
 export function PlanesPage() {
+  // La lista permite crear y localizar planes. La revisión y las decisiones
+  // se realizan en el expediente, donde está disponible su contenido completo.
   const { hasPermission, user } = useAuth();
   const scope = user?.rol?.alcance;
   const hasInstitutionalScope = Boolean(

@@ -25,6 +25,8 @@ def _es_clave_sensible(clave):
 
 
 def sanitizar_valor(valor):
+    # Revisa también las estructuras anidadas antes de guardar el JSON.
+    # El detalle libre del evento debe redactarse sin credenciales ni secretos.
     if isinstance(valor, dict):
         return {
             str(clave): sanitizar_valor(contenido)
@@ -58,6 +60,7 @@ def serializar_instancia(instancia):
 
 
 def obtener_direccion_ip(request):
+    # Usa la conexión recibida; no confía en cabeceras reenviadas por el cliente.
     if request is None:
         return None
     return request.META.get("REMOTE_ADDR") or None
@@ -143,6 +146,8 @@ class AuditoriaModelViewSetMixin:
     audit_funcionalidad = "gestión"
 
     def _obtener_instancia_bloqueada(self, instancia_autorizada):
+        # Tras tomar el bloqueo, vuelve a consultar el alcance y los permisos:
+        # el registro pudo cambiar mientras esta solicitud esperaba.
         modelo = type(instancia_autorizada)
         modelo._default_manager.select_for_update().get(
             pk=instancia_autorizada.pk
@@ -203,6 +208,8 @@ class AuditoriaModelViewSetMixin:
 
     @transaction.atomic
     def perform_destroy(self, instance):
+        # Conserva la identificación y los valores antes de eliminar. Si falla
+        # la eliminación o su auditoría, la transacción revierte la operación.
         antes = serializar_instancia(instance)
         tipo_entidad = instance._meta.label
         registro_id = str(instance.pk)

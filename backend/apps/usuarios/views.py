@@ -65,6 +65,7 @@ class UsuarioViewSet(AuditoriaModelViewSetMixin, viewsets.ModelViewSet):
     audit_funcionalidad = "usuarios"
 
     def get_queryset(self):
+        # También protege el detalle por ID, no solo la tabla del frontend.
         return filtrar_queryset_por_entidad(
             super().get_queryset(), self.request.user, "entidad"
         )
@@ -85,6 +86,8 @@ class UsuarioViewSet(AuditoriaModelViewSetMixin, viewsets.ModelViewSet):
 
     @staticmethod
     def _tiene_registros_trazables(usuario):
+        # Una cuenta con historial no puede trasladarse de institución mediante
+        # una edición ordinaria: sus actuaciones deben conservar el contexto.
         relaciones = (
             "planes_responsables",
             "planes_creados",
@@ -102,6 +105,8 @@ class UsuarioViewSet(AuditoriaModelViewSetMixin, viewsets.ModelViewSet):
 
     @staticmethod
     def _proteger_cuenta_administrativa(actor, objetivo):
+        # El permiso de editar usuarios no permite controlar cuentas técnicas
+        # o privilegiadas desde una cuenta administrativa ordinaria.
         es_administrativa = (
             objetivo.is_staff
             or objetivo.is_superuser
@@ -232,6 +237,8 @@ class UsuarioViewSet(AuditoriaModelViewSetMixin, viewsets.ModelViewSet):
         usuario = self._obtener_instancia_bloqueada(usuario_autorizado)
         self._proteger_cuenta_administrativa(request.user, usuario)
         antes = serializar_instancia(usuario)
+        # is_active también deshabilita la autenticación de Django; cambiar solo
+        # el estado visible dejaría una cuenta aparentemente bloqueada pero activa.
         usuario.estado = Usuario.EstadoUsuario.BLOQUEADO
         usuario.is_active = False
         usuario.save(update_fields=["estado", "is_active"])

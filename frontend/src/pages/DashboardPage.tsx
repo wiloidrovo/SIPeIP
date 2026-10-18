@@ -28,6 +28,7 @@ const SCOPE_LABELS: Record<string, string> = {
 };
 
 export function DashboardPage() {
+  // Renderiza los widgets autorizados por la API sin reconstruir reglas por rol.
   const { user } = useAuth();
   const [data, setData] = useState<Dashboard | null>(null);
   const [error, setError] = useState("");
